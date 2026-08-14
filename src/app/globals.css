@@ -1,26 +1,317 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #070809;
+  --ink-2: #0d0f13;
+  --panel: #101318;
+  --line: rgba(201, 162, 39, 0.16);
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --brass: #c9a227;
+  --brass-lit: #f0d478;
+  --bone: #ece6d9;
+  --muted: #8b8f99;
+  --for: #d8524f;
+  --against: #37b79c;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-panel: var(--panel);
+  --color-brass: var(--brass);
+  --color-brass-lit: var(--brass-lit);
+  --color-bone: var(--bone);
+  --color-muted: var(--muted);
+  --color-for: var(--for);
+  --color-against: var(--against);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-cormorant);
+  --font-mono: var(--font-mono-code);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(201, 162, 39, 0.13), transparent 60%),
+    radial-gradient(80% 60% at 50% 110%, rgba(55, 183, 156, 0.07), transparent 65%),
+    var(--ink);
+  color: var(--bone);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Fine wood-grain / paper tooth over the whole stage. */
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.014) 0px,
+    rgba(255, 255, 255, 0.014) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.vignette::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(115% 85% at 50% 40%, transparent 45%, rgba(0, 0, 0, 0.72) 100%);
+}
+
+.display {
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+.mono {
+  font-family: var(--font-mono-code), ui-monospace, monospace;
+}
+
+/*
+ * Tailwind v4's preflight leaves buttons on the default arrow cursor, so
+ * nothing in the app looked clickable. Put the hand back everywhere, and make
+ * a disabled control say so rather than silently ignoring the click.
+ */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+label:has(> input[type="checkbox"]),
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.rule {
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+  height: 1px;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+  border: 1px solid var(--line-soft);
+  backdrop-filter: blur(8px);
+}
+
+/* ── Deliberation tension ─────────────────────────────────────────────── */
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.014);
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    transform: scale(0.86);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes think-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  42% {
+    opacity: 0.95;
+  }
+  44% {
+    opacity: 0.55;
+  }
+  47% {
+    opacity: 0.92;
+  }
+  70% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes tick {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes seal-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.9) rotate(-14deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.94) rotate(2deg);
+  }
+  75% {
+    transform: scale(1.03) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes shockwave {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(3px, -2px);
+  }
+  60% {
+    transform: translate(-2px, -1px);
+  }
+  80% {
+    transform: translate(2px, 1px);
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.5;
+  }
+  to {
+    transform: translateY(-70px) translateX(14px);
+    opacity: 0;
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.a-breathe {
+  animation: breathe 3.6s ease-in-out infinite;
+}
+.a-flicker {
+  animation: flicker 7s ease-in-out infinite;
+}
+.a-rise {
+  animation: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.a-seal {
+  animation: seal-in 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.a-shake {
+  animation: shake 0.45s ease-in-out 1;
+}
+.a-sweep {
+  animation: sweep 2.6s ease-in-out infinite;
+}
+
+.thinking-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  animation: ring-pulse 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+::selection {
+  background: rgba(201, 162, 39, 0.3);
+}
+
+textarea,
+input {
+  font-family: inherit;
+}
+
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(201, 162, 39, 0.25);
+  border-radius: 8px;
 }
