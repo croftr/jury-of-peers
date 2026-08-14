@@ -1,14 +1,67 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import JurorAvatar from "@/components/JurorAvatar";
 import { JURORS, slugFor } from "@/lib/jurors";
 import { MAX_INSTRUCTION, useJuryConfig } from "@/lib/juryConfig";
-import { modelFor } from "@/lib/models";
+import { modelFor, type JurorModel } from "@/lib/models";
+
+/** What one case costs this juror, on a case the size of the sample. */
+function costPerCase(model: JurorModel): number {
+  return (1200 * model.inPerM + 350 * model.outPerM) / 1_000_000;
+}
+
+type SortKey = "seat" | "cost" | "context" | "seated";
+type Direction = "asc" | "desc";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "seat", label: "Seat order" },
+  { key: "cost", label: "Cost per case" },
+  { key: "context", label: "Context window" },
+  { key: "seated", label: "Seated first" },
+];
+
+/** The direction each sort should open with — cheapest first, biggest window first. */
+const OPENS: Record<SortKey, Direction> = {
+  seat: "asc",
+  cost: "asc",
+  context: "desc",
+  seated: "desc",
+};
 
 export default function JuryPage() {
   const { config, toggleSeat, setInstruction, reset } = useJuryConfig();
   const seatedCount = config.seated.length;
+  const [sort, setSort] = useState<SortKey>("seat");
+  const [direction, setDirection] = useState<Direction>("asc");
+
+  const ordered = useMemo(() => {
+    const sign = direction === "asc" ? 1 : -1;
+    const value = (id: number) => {
+      const m = modelFor(id);
+      switch (sort) {
+        case "cost":
+          return m ? costPerCase(m) : 0;
+        case "context":
+          return m?.context ?? 0;
+        case "seated":
+          return config.seated.includes(id) ? 1 : 0;
+        default:
+          return id;
+      }
+    };
+    // Seat order breaks every tie, so equal values stay in a stable, familiar order.
+    return [...JURORS].sort((a, b) => sign * (value(a.id) - value(b.id)) || a.id - b.id);
+  }, [sort, direction, config.seated]);
+
+  const chooseSort = (key: SortKey) => {
+    if (key === sort) setDirection((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSort(key);
+      setDirection(OPENS[key]);
+    }
+  };
 
   // Estimated cost of one case across the seated bench, on a ~1,200-token case
   // and ~350 tokens of reasoning each — the same shape as the sample.
@@ -84,8 +137,37 @@ export default function JuryPage() {
         </p>
       )}
 
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="mono text-[10px] tracking-[0.2em] uppercase text-muted mr-1">
+          Sort by
+        </span>
+        {SORTS.map(({ key, label }) => {
+          const active = sort === key;
+          return (
+            <button
+              key={key}
+              onClick={() => chooseSort(key)}
+              aria-pressed={active}
+              title={active ? "Click again to reverse" : undefined}
+              className={`mono text-[9px] tracking-[0.16em] uppercase px-3 py-2 rounded-md border transition-colors ${
+                active
+                  ? "border-brass/50 text-brass-lit bg-brass/10"
+                  : "border-white/10 text-muted hover:text-bone hover:border-white/25"
+              }`}
+            >
+              {label}
+              {active && (
+                <span aria-hidden className="ml-1.5">
+                  {direction === "asc" ? "↑" : "↓"}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="space-y-3">
-        {JURORS.map((juror) => {
+        {ordered.map((juror) => {
           const model = modelFor(juror.id);
           const seated = config.seated.includes(juror.id);
           const instruction = config.instructions[juror.id] ?? "";
@@ -141,27 +223,19 @@ export default function JuryPage() {
                   <p className="text-sm text-muted mt-2 leading-relaxed">{juror.disposition}</p>
 
                   {model && (
-                    <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 mono text-[10px] tracking-[0.1em] uppercase text-muted/70">
-                      <div>
-                        <dt className="sr-only">Model</dt>
-                        <dd className="text-bone/80">{model.label}</dd>
-                      </div>
-                      <div>
-                        <dt className="sr-only">Lab</dt>
-                        <dd>{model.lab}</dd>
-                      </div>
-                      <div>
-                        <dt className="sr-only">Context window</dt>
-                        <dd className="tabular-nums">
-                          {(model.context / 1000).toFixed(0)}k ctx
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="sr-only">Price</dt>
-                        <dd className="tabular-nums">
-                          ${model.inPerM}/${model.outPerM} per M
-                        </dd>
-                      </div>
+                    <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-4">
+                      <Stat label="Model" value={model.label} strong />
+                      <Stat label="Lab" value={model.lab} />
+                      <Stat
+                        label="Context"
+                        value={`${(model.context / 1000).toFixed(0)}k tokens`}
+                        warn={model.context < 100_000}
+                      />
+                      <Stat
+                        label="Price per M"
+                        value={`$${model.inPerM} in · $${model.outPerM} out`}
+                      />
+                      <Stat label="Per case" value={`≈ $${costPerCase(model).toFixed(5)}`} />
                     </dl>
                   )}
 
@@ -198,5 +272,31 @@ export default function JuryPage() {
         </Link>
       </div>
     </main>
+  );
+}
+
+/** One labelled figure in a juror's stat row. */
+function Stat({
+  label,
+  value,
+  strong,
+  warn,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="mono text-[9px] tracking-[0.2em] uppercase text-muted/60">{label}</dt>
+      <dd
+        className={`mt-1 text-sm tabular-nums ${
+          strong ? "text-bone" : warn ? "text-brass" : "text-bone/75"
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
