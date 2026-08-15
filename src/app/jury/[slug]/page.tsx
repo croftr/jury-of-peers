@@ -21,7 +21,6 @@ export default function JurorPage() {
 
   const model = modelFor(juror.id);
   const seated = config.seated.includes(juror.id);
-  const lastSeated = seated && config.seated.length === 1;
   const instruction = config.instructions[juror.id] ?? "";
 
   const index = JURORS.findIndex((j) => j.id === juror.id);
@@ -70,13 +69,11 @@ export default function JurorPage() {
 
           <button
             onClick={() => toggleSeat(juror.id)}
-            disabled={lastSeated}
-            title={lastSeated ? "A jury needs at least one juror" : undefined}
             className={`mt-5 mono text-[10px] tracking-[0.2em] uppercase px-4 py-2.5 rounded-md border transition-colors ${
               seated
                 ? "border-brass/50 text-brass-lit bg-brass/10 hover:bg-brass/20"
                 : "border-white/12 text-muted hover:text-bone hover:border-white/30"
-            } disabled:opacity-40 disabled:cursor-not-allowed`}
+            }`}
           >
             {seated ? "Seated · click to excuse" : "Excused · click to seat"}
           </button>

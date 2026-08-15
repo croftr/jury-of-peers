@@ -12,7 +12,7 @@ import { JURORS } from "./jurors";
  * sends each juror's instruction along with the case.
  */
 export interface JuryConfig {
-  /** Juror ids currently seated. At least one, always. */
+  /** Juror ids currently seated. */
   seated: number[];
   /** Per-juror standing instruction, keyed by juror id. */
   instructions: Record<number, string>;
@@ -28,7 +28,7 @@ export const DEFAULT_CONFIG: JuryConfig = {
   instructions: {},
 };
 
-/** Drop unknown ids, restore seat order, and never allow an empty jury. */
+/** Drop unknown ids and restore seat order. */
 export function sanitize(config: Partial<JuryConfig> | null | undefined): JuryConfig {
   const valid = new Set(JURORS.map((j) => j.id));
 
@@ -47,8 +47,7 @@ export function sanitize(config: Partial<JuryConfig> | null | undefined): JuryCo
     if (kept.trim()) instructions[id] = kept;
   }
 
-  // A jury of nobody cannot return a verdict — fall back to the full bench.
-  return { seated: seated.length ? seated : [...DEFAULT_CONFIG.seated], instructions };
+  return { seated: Array.isArray(config?.seated) ? seated : [...DEFAULT_CONFIG.seated], instructions };
 }
 
 function read(): JuryConfig {
@@ -132,9 +131,18 @@ export function useJuryConfig() {
         const seated = current.seated.includes(jurorId)
           ? current.seated.filter((id) => id !== jurorId)
           : [...current.seated, jurorId];
-        // Refuse to empty the box; the caller disables the control too.
-        return seated.length ? { ...current, seated } : current;
+        return { ...current, seated };
       }),
+    [mutate],
+  );
+
+  const removeAll = useCallback(
+    () => mutate((current) => ({ ...current, seated: [] })),
+    [mutate],
+  );
+
+  const restoreAll = useCallback(
+    () => mutate((current) => ({ ...current, seated: JURORS.map((j) => j.id) })),
     [mutate],
   );
 
@@ -152,7 +160,7 @@ export function useJuryConfig() {
 
   const reset = useCallback(() => mutate(() => DEFAULT_CONFIG), [mutate]);
 
-  return { config, update, toggleSeat, setInstruction, reset };
+  return { config, update, toggleSeat, removeAll, restoreAll, setInstruction, reset };
 }
 
 /** The seated jurors, in seat order. */

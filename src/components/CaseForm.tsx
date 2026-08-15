@@ -32,27 +32,24 @@ export default function CaseForm({
   onChange,
   onSubmit,
   busy,
+  benchCount,
 }: {
   caseFile: CaseFile;
   onChange: (c: CaseFile) => void;
   onSubmit: () => void;
   busy: boolean;
+  benchCount?: number;
 }) {
   const [preset, setPreset] = useState("criminal");
   const words = caseFile.evidence.trim() ? caseFile.evidence.trim().split(/\s+/).length : 0;
-  const ready = words > 0 && !busy;
+  const ready = words > 0 && !busy && (benchCount === undefined || benchCount > 0);
 
   return (
     <section className="panel rounded-2xl p-6 sm:p-8 relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px rule" />
 
-      <header className="flex items-baseline justify-between gap-4 mb-6">
-        <div>
-          <p className="mono text-[10px] tracking-[0.32em] text-brass/70 uppercase">
-            Exhibit intake
-          </p>
-          <h2 className="display text-3xl mt-1">The case file</h2>
-        </div>
+      <header className="flex items-baseline justify-between gap-4 mb-5">
+        <h2 className="display text-3xl">The case file</h2>
         <button
           type="button"
           onClick={() => {
@@ -61,28 +58,22 @@ export default function CaseForm({
           }}
           className="mono text-[10px] tracking-[0.18em] uppercase text-muted hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted"
         >
-          Load sample
+          Try a sample
         </button>
       </header>
 
-      <label className="block mb-5">
-        <span className="mono text-[10px] tracking-[0.24em] uppercase text-muted">
-          Matter
-        </span>
+      <label className="block mb-4">
         <input
           value={caseFile.title}
           onChange={(e) => onChange({ ...caseFile, title: e.target.value })}
-          placeholder="Untitled matter"
-          className="mt-2 w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 display text-xl
+          placeholder="Name the matter…"
+          className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 display text-xl
                      outline-none focus:border-brass/50 focus:bg-black/45 transition-colors placeholder:text-white/20"
         />
       </label>
 
-      <div className="mb-5">
-        <span className="mono text-[10px] tracking-[0.24em] uppercase text-muted">
-          The question before the jury
-        </span>
-        <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mb-4">
+        <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -125,34 +116,39 @@ export default function CaseForm({
       </div>
 
       <label className="block">
-        <span className="mono text-[10px] tracking-[0.24em] uppercase text-muted">
-          Evidence, testimony &amp; exhibits
-        </span>
         <textarea
           value={caseFile.evidence}
           onChange={(e) => onChange({ ...caseFile, evidence: e.target.value })}
-          rows={12}
-          placeholder="Paste the facts of the matter. Statements, documents, timelines, arguments on both sides — the jury reads exactly what you give it and nothing more."
-          className="mt-2 w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-sm leading-relaxed
+          rows={9}
+          placeholder="Drop the evidence here. Statements, timelines, both sides of the argument — the jury reads only what you give it."
+          className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-sm leading-relaxed
                      outline-none focus:border-brass/50 focus:bg-black/45 transition-colors resize-y
                      placeholder:text-white/20"
         />
       </label>
 
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <span className="mono text-[10px] tracking-[0.16em] uppercase text-muted">
-          {words.toLocaleString()} words submitted
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <span className="mono text-[10px] tracking-[0.16em] uppercase text-muted tabular-nums">
+          {words.toLocaleString()} words
         </span>
         <button
           type="button"
           disabled={!ready}
           onClick={onSubmit}
+          title={benchCount === 0 ? "Empanel at least one juror to deliberate" : undefined}
           className="group relative px-7 py-3.5 rounded-lg overflow-hidden border border-brass/45
                      disabled:opacity-35 disabled:cursor-not-allowed
                      enabled:hover:border-brass enabled:hover:bg-brass/10 transition-colors"
         >
-          <span className="mono text-[11px] tracking-[0.28em] uppercase text-brass-lit">
-            {busy ? "Jury is out" : "Charge the jury"}
+          <span className="mono text-[11px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-2.5">
+            <svg viewBox="0 0 48 48" fill="none" className="gavel size-4" aria-hidden>
+              <g stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
+                <path d="M20.5 17.5 32 29" />
+                <path d="M9 38h26" />
+              </g>
+            </svg>
+            {busy ? "Jury is out" : benchCount === 0 ? "No jurors seated" : "Send them out"}
           </span>
           {ready && (
             <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">

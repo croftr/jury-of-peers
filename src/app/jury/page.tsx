@@ -31,7 +31,7 @@ const OPENS: Record<SortKey, Direction> = {
 };
 
 export default function JuryPage() {
-  const { config, toggleSeat, setInstruction, reset } = useJuryConfig();
+  const { config, toggleSeat, removeAll, restoreAll, setInstruction } = useJuryConfig();
   const seatedCount = config.seated.length;
   const [sort, setSort] = useState<SortKey>("seat");
   const [direction, setDirection] = useState<Direction>("asc");
@@ -94,9 +94,8 @@ export default function JuryPage() {
         <div className="rule w-full mt-5" />
         <p className="mt-5 text-sm text-muted max-w-2xl leading-relaxed">
           Excuse any juror you don&apos;t want to hear the case, and give any of them a
-          standing instruction to shape how they read the evidence. At least one juror must
-          remain seated. Changes save as you make them and apply to the next case you
-          charge.
+          standing instruction to shape how they read the evidence. Changes save as you
+          make them and apply to the next case you charge.
         </p>
       </header>
 
@@ -108,6 +107,11 @@ export default function JuryPage() {
               {seatedCount}
               <span className="text-muted text-base"> of {JURORS.length} seated</span>
             </span>
+            {seatedCount === 0 && (
+              <span className="mono text-[9px] tracking-[0.16em] uppercase text-for">
+                Empty bench
+              </span>
+            )}
             {seatedCount === 1 && (
               <span className="mono text-[9px] tracking-[0.16em] uppercase text-brass">
                 Minimum bench
@@ -119,8 +123,16 @@ export default function JuryPage() {
               ≈ ${estimate.toFixed(4)} per case
             </span>
             <button
-              onClick={reset}
-              className="mono text-[9px] tracking-[0.16em] uppercase text-muted hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted"
+              onClick={removeAll}
+              disabled={seatedCount === 0}
+              className="mono text-[9px] tracking-[0.16em] uppercase text-muted hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted disabled:opacity-40 disabled:hover:text-muted disabled:cursor-not-allowed"
+            >
+              Remove all
+            </button>
+            <button
+              onClick={restoreAll}
+              disabled={seatedCount === JURORS.length}
+              className="mono text-[9px] tracking-[0.16em] uppercase text-muted hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted disabled:opacity-40 disabled:hover:text-muted disabled:cursor-not-allowed"
             >
               Restore all twelve
             </button>
@@ -171,7 +183,6 @@ export default function JuryPage() {
           const model = modelFor(juror.id);
           const seated = config.seated.includes(juror.id);
           const instruction = config.instructions[juror.id] ?? "";
-          const lastSeated = seated && seatedCount === 1;
 
           return (
             <article
@@ -208,13 +219,11 @@ export default function JuryPage() {
 
                     <button
                       onClick={() => toggleSeat(juror.id)}
-                      disabled={lastSeated}
-                      title={lastSeated ? "A jury needs at least one juror" : undefined}
                       className={`mono text-[9px] tracking-[0.18em] uppercase px-3 py-2 rounded-md border transition-colors shrink-0 ${
                         seated
                           ? "border-brass/50 text-brass-lit bg-brass/10 hover:bg-brass/20"
                           : "border-white/12 text-muted hover:text-bone hover:border-white/30"
-                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      }`}
                     >
                       {seated ? "Seated" : "Excused"}
                     </button>

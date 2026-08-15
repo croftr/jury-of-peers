@@ -106,6 +106,74 @@ button:disabled {
   backdrop-filter: blur(8px);
 }
 
+/* ── The room ─────────────────────────────────────────────────────────────
+ * Seats surround the well on a wide screen and stack around it on a narrow
+ * one. Grid areas rather than utility soup because the two arrangements are
+ * genuinely different shapes, not one shape with different gaps.
+ */
+.courtroom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "jury"
+    "well";
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .courtroom {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "jury well";
+    gap: 1.75rem;
+    align-items: start;
+  }
+}
+
+.ct-jury {
+  grid-area: jury;
+}
+.ct-well {
+  grid-area: well;
+}
+
+/* The polished bench rail the jurors sit behind. */
+.rail {
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(201, 162, 39, 0.5), rgba(201, 162, 39, 0.08)),
+    linear-gradient(90deg, transparent, rgba(120, 78, 32, 0.55) 12%, rgba(120, 78, 32, 0.55) 88%, transparent);
+  box-shadow: 0 6px 22px -10px rgba(201, 162, 39, 0.7);
+}
+
+/* A gavel that cocks back when you hover the thing it is attached to. */
+.gavel {
+  transform-origin: 78% 78%;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.group:hover .gavel {
+  transform: rotate(-26deg);
+}
+
+@keyframes gavel-strike {
+  0% {
+    transform: rotate(-30deg);
+  }
+  45% {
+    transform: rotate(16deg);
+  }
+  62% {
+    transform: rotate(2deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.a-strike {
+  animation: gavel-strike 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── Deliberation tension ─────────────────────────────────────────────── */
 
 @keyframes breathe {

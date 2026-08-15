@@ -9,7 +9,7 @@ import JurorDossier from "@/components/JurorDossier";
 import VerdictPanel from "@/components/VerdictPanel";
 import type { Phase } from "@/components/JurorSeat";
 import { tally as computeTally } from "@/lib/deliberate";
-import { getJuror } from "@/lib/jurors";
+import { JURORS, getJuror } from "@/lib/jurors";
 import { seatedJurors, useJuryConfig } from "@/lib/juryConfig";
 import type { CaseFile, JurorExplanation, JurorFailure, JurorVerdict } from "@/lib/types";
 
@@ -20,6 +20,20 @@ const EMPTY: CaseFile = {
 };
 
 const WORDS = ["no", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+
+/** The court's mark. Head, handle, and the block it lands on. */
+function Gavel({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden>
+      <g stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
+        <path d="M20.5 17.5 32 29" />
+        <path d="M9 38h26" />
+        <path d="M12 34h20" />
+      </g>
+    </svg>
+  );
+}
 
 export default function Home() {
   const [caseFile, setCaseFile] = useState<CaseFile>(EMPTY);
@@ -55,6 +69,11 @@ export default function Home() {
   }, []);
 
   const charge = useCallback(async () => {
+    if (bench.length === 0) {
+      setError("No jurors are seated. Choose your jury to empanel at least one juror.");
+      return;
+    }
+
     const run = ++runId.current;
     setError(null);
     setVerdicts(new Map());
@@ -197,23 +216,23 @@ export default function Home() {
   const selectedJuror = selected != null ? getJuror(selected) : undefined;
 
   return (
-    <main className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-8 py-10 sm:py-16">
-      <header className="text-center mb-12 sm:mb-16">
-        <p className="mono text-[10px] tracking-[0.42em] uppercase text-brass/70">
-          {WORDS[bench.length] ?? bench.length} mind{bench.length === 1 ? "" : "s"} · one finding
-        </p>
-        <h1 className="display text-[clamp(2.8rem,9vw,5.5rem)] leading-[0.95] mt-3">
-          Jury of <span className="text-brass-lit a-flicker">Peers</span>
-        </h1>
-        <div className="rule w-64 mx-auto mt-5" />
-        <p className="mt-5 text-sm sm:text-base text-muted max-w-xl mx-auto leading-relaxed">
-          Submit a case, a dispute, or a debate. Your jurors — each with a different way of
-          reading evidence, and each a different model — retire, deliberate, and return
-          their findings independently. Then the room speaks as one.
-        </p>
+    <main className="relative z-10 mx-auto w-full max-w-6xl px-3 sm:px-8 py-5 sm:py-8">
+      {/* The bench: title on the left, the state of the room on the right. */}
+      <header className="mb-5 sm:mb-7">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="flex items-center gap-3">
+            <Gavel className="size-8 sm:size-10 text-brass shrink-0" />
+            <div>
+              <h1 className="display text-[clamp(1.8rem,5vw,3rem)] leading-none">
+                Jury of <span className="text-brass-lit a-flicker">Peers</span>
+              </h1>
+              <p className="mono text-[9px] tracking-[0.3em] uppercase text-brass/60 mt-1.5">
+                {WORDS[bench.length] ?? bench.length} mind{bench.length === 1 ? "" : "s"} · one finding
+              </p>
+            </div>
+          </div>
 
-        {live !== null && (
-          <div className="mt-6 flex justify-center">
+          {live !== null && (
             <span
               className="mono text-[9px] tracking-[0.22em] uppercase px-3 py-1.5 rounded-full border inline-flex items-center gap-2"
               style={{
@@ -228,57 +247,14 @@ export default function Home() {
                   animation: live ? "tick 1.6s ease-in-out infinite" : undefined,
                 }}
               />
-              {live
-                ? `${bench.length} live model${bench.length === 1 ? "" : "s"} · empanelled`
-                : "Simulated jury · no API key set"}
+              {live ? "Court in session" : "Rehearsal · no API key"}
             </span>
-          </div>
-        )}
-
-        <div className="mt-5 flex flex-wrap justify-center items-center gap-x-5 gap-y-2">
-          <Link
-            href="/jury"
-            className="mono text-[10px] tracking-[0.2em] uppercase text-muted hover:text-brass-lit
-                       transition-colors underline underline-offset-4 decoration-dotted"
-          >
-            Choose your jury ({bench.length} of 12 seated)
-          </Link>
-          <Link
-            href="/archive"
-            className="mono text-[10px] tracking-[0.2em] uppercase text-muted hover:text-brass-lit
-                       transition-colors underline underline-offset-4 decoration-dotted"
-          >
-            Past cases
-          </Link>
-        </div>
-      </header>
-
-      {phase === "idle" && (
-        <div className="mb-14 a-rise">
-          <CaseForm
-            caseFile={caseFile}
-            onChange={setCaseFile}
-            onSubmit={charge}
-            busy={false}
-          />
-          {error && (
-            <p className="mt-4 text-center text-sm text-for">{error}</p>
           )}
         </div>
-      )}
+        <div className="rule mt-4" />
+      </header>
 
-      {phase !== "idle" && (
-        <div className="mb-10 text-center a-rise">
-          <p className="mono text-[10px] tracking-[0.3em] uppercase text-muted">
-            In the matter of
-          </p>
-          <p className="display text-2xl sm:text-3xl mt-1">
-            {caseFile.title || "an untitled matter"}
-          </p>
-        </div>
-      )}
-
-      <div ref={boxRef} className="scroll-mt-8">
+      <div ref={boxRef} className="scroll-mt-4">
         <JuryBox
           jurors={bench}
           verdicts={verdicts}
@@ -286,73 +262,94 @@ export default function Home() {
           phase={phase}
           options={caseFile.options}
           onSelect={setSelected}
+          controls={
+            <Link
+              href="/jury"
+              className="mono text-[10px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                         transition-colors underline underline-offset-4 decoration-dotted"
+            >
+              The jury ({bench.length}/{JURORS.length})
+            </Link>
+          }
+          wellControls={
+            <Link
+              href="/archive"
+              className="mono text-[10px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                         transition-colors underline underline-offset-4 decoration-dotted"
+            >
+              Past cases
+            </Link>
+          }
         >
-          {phase === "deliberating" && (
-            <DeliberationWell
-              active
-              returned={verdicts.size}
-              failed={failures.size}
-              total={bench.length}
-              options={caseFile.options}
-              verdicts={list}
-            />
-          )}
           {phase === "idle" && (
-            <p className="mono text-[10px] tracking-[0.26em] uppercase text-muted/50 text-center">
-              The jury is seated and waiting
-            </p>
+            <div className="a-rise">
+              <CaseForm
+                caseFile={caseFile}
+                onChange={setCaseFile}
+                onSubmit={charge}
+                busy={false}
+                benchCount={bench.length}
+              />
+              {error && <p className="mt-4 text-center text-sm text-for">{error}</p>}
+            </div>
           )}
+
+          {phase === "deliberating" && (
+            <div className="a-rise flex flex-col items-center">
+              <p className="display text-2xl sm:text-3xl text-center mb-4">
+                {caseFile.title || "An untitled matter"}
+              </p>
+              <DeliberationWell
+                active
+                returned={verdicts.size}
+                failed={failures.size}
+                total={bench.length}
+                options={caseFile.options}
+                verdicts={list}
+              />
+            </div>
+          )}
+
           {phase === "verdict" && (
-            <p className="mono text-[10px] tracking-[0.22em] uppercase text-brass/70 text-center a-rise">
-              Click any juror to read their reasoning — or ask them why
-            </p>
+            <div className="a-rise">
+              <VerdictPanel
+                jurors={bench}
+                caseFile={caseFile}
+                tally={tally}
+                verdicts={list}
+                failures={failures}
+                onReset={reset}
+                onSelect={setSelected}
+              />
+              {filed && (
+                <p className="mt-4 text-center mono text-[9px] tracking-[0.2em] uppercase text-muted/60">
+                  {filed === "stored" ? (
+                    <Link href="/archive" className="text-brass/80 hover:text-brass-lit transition-colors">
+                      Filed with the past cases
+                    </Link>
+                  ) : filed === "failed" ? (
+                    <span className="text-for/70">The archive would not take this one</span>
+                  ) : (
+                    "Not archived · no bucket configured"
+                  )}
+                </p>
+              )}
+            </div>
           )}
         </JuryBox>
       </div>
 
-      {phase === "verdict" && (
-        <div className="mt-14">
-          <VerdictPanel
-            jurors={bench}
-            caseFile={caseFile}
-            tally={tally}
-            verdicts={list}
-            failures={failures}
-            onReset={reset}
-            onSelect={setSelected}
-          />
-          {filed && (
-            <p className="mt-4 text-center mono text-[9px] tracking-[0.2em] uppercase text-muted/60">
-              {filed === "stored" ? (
-                <>
-                  Filed ·{" "}
-                  <Link href="/archive" className="text-brass/80 hover:text-brass-lit transition-colors">
-                    past cases
-                  </Link>
-                </>
-              ) : filed === "failed" ? (
-                "The archive refused this case — the verdict stands, but it was not recorded"
-              ) : (
-                "Not archived · no bucket configured"
-              )}
-            </p>
-          )}
-        </div>
-      )}
-
-      <footer className="mt-20 text-center">
-        <div className="rule w-40 mx-auto mb-5" />
+      <footer className="mt-12 text-center">
+        <div className="rule w-40 mx-auto mb-4" />
         <p className="mono text-[9px] tracking-[0.24em] uppercase text-muted/50">
-          Findings are generated by language models · no juror is a real person ·
-          nothing here is legal advice
+          Twelve models · no juror is a real person ·{" "}
+          <a
+            href="/logout"
+            className="hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted"
+          >
+            leave the court
+          </a>
         </p>
-        <a
-          href="/logout"
-          className="mono text-[9px] tracking-[0.24em] uppercase text-muted/50 hover:text-brass-lit
-                     transition-colors underline underline-offset-4 decoration-dotted mt-3 inline-block"
-        >
-          Leave the court
-        </a>
       </footer>
 
       {selectedJuror && (
