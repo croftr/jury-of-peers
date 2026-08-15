@@ -51,19 +51,19 @@ type Step = 0 | 1 | 2 | 3;
 const STEPS: { n: 1 | 2 | 3; label: string; question: string; hint: string }[] = [
   {
     n: 1,
-    label: "The matter",
+    label: "Name",
     question: "What is this case called?",
     hint: "A line the jury will see at the top of the file.",
   },
   {
     n: 2,
-    label: "The finding",
+    label: "Type",
     question: "What are they deciding between?",
     hint: "Pick the shape of the case, then reword the two findings if you like.",
   },
   {
     n: 3,
-    label: "The evidence",
+    label: "Evidence",
     question: "What should the jury read?",
     hint: "Statements, timelines, both sides — they know only what you give them.",
   },
@@ -180,7 +180,7 @@ export default function CaseForm({
       {/* ── The closed folder ───────────────────────────────────────────── */}
       {step === 0 && (
         <div className="a-rise flex flex-col items-center text-center py-6 sm:py-10">
-          <h2 className="display text-3xl sm:text-4xl">The case file</h2>
+          <h2 className="display text-3xl sm:text-4xl">The case</h2>
           <p className="mt-3 text-[15px] text-muted max-w-sm leading-relaxed">
             {titled || words > 0
               ? "A file is open on the desk. Take it up where you left it, or start again."
@@ -218,7 +218,7 @@ export default function CaseForm({
         <div>
           <header className="mb-6">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 className="display text-2xl sm:text-3xl">The case file</h2>
+              <h2 className="display text-2xl sm:text-3xl">The case</h2>
               <span className="mono text-[11px] tracking-[0.2em] uppercase text-muted tabular-nums">
                 Step {step} of 3
               </span>
@@ -237,18 +237,17 @@ export default function CaseForm({
                       className={`w-full text-left group ${state === "ahead" ? "cursor-default" : ""}`}
                     >
                       <span
-                        className={`block h-px transition-colors ${
-                          state === "ahead" ? "bg-white/10" : "bg-brass/60"
-                        }`}
+                        className={`block h-px transition-colors ${state === "ahead" ? "bg-white/10" : "bg-brass/60"
+                          }`}
                       />
                       <span
-                        className={`mt-2 block mono text-[10px] sm:text-[11px] tracking-[0.18em] uppercase transition-colors ${
-                          state === "here"
+                        className={`mt-2 block mono text-[10px] sm:text-[11px] tracking-[0.1em] sm:tracking-[0.18em]
+                                    uppercase whitespace-nowrap transition-colors ${state === "here"
                             ? "text-brass-lit"
                             : state === "done"
                               ? "text-muted group-hover:text-bone"
                               : "text-white/25"
-                        }`}
+                          }`}
                       >
                         {s.n}. {s.label}
                       </span>
@@ -302,16 +301,14 @@ export default function CaseForm({
                         setPreset(p.key);
                         onChange({ ...caseFile, options: [...p.options] as [string, string] });
                       }}
-                      className={`text-left px-4 py-3 rounded-lg border transition-colors ${
-                        preset === p.key
-                          ? "border-brass/60 bg-brass/10"
-                          : "border-white/10 hover:border-white/25"
-                      }`}
+                      className={`text-left px-4 py-3 rounded-lg border transition-colors ${preset === p.key
+                        ? "border-brass/60 bg-brass/10"
+                        : "border-white/10 hover:border-white/25"
+                        }`}
                     >
                       <span
-                        className={`mono text-[11px] tracking-[0.16em] uppercase block ${
-                          preset === p.key ? "text-brass-lit" : "text-muted"
-                        }`}
+                        className={`mono text-[11px] tracking-[0.16em] uppercase block ${preset === p.key ? "text-brass-lit" : "text-muted"
+                          }`}
                       >
                         {p.label}
                       </span>
