@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { CaseFile } from "@/lib/types";
 
+/** What the extractor on /api/extract knows how to read. */
+const ACCEPT = ".txt,.text,.md,.markdown,.csv,.tsv,.json,.log,.rtf,.pdf,.docx,text/plain";
+
 const PRESETS: { key: string; label: string; blurb: string; options: [string, string] }[] = [
   {
     key: "criminal",
@@ -93,8 +96,13 @@ export default function CaseForm({
 }) {
   const [step, setStep] = useState<Step>(0);
   const [preset, setPreset] = useState("criminal");
+  const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [attached, setAttached] = useState<string[]>([]);
   const titleRef = useRef<HTMLInputElement>(null);
   const evidenceRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   // Each question takes the cursor when it comes up, so the whole file can be
   // filled in without touching the mouse.
@@ -115,7 +123,54 @@ export default function CaseForm({
   const sample = () => {
     setPreset("criminal");
     onChange(SAMPLE);
+    setAttached([]);
+    setUploadError(null);
     setStep(3);
+  };
+
+  /**
+   * Read dropped or chosen documents into the evidence.
+   *
+   * The server does the extracting — PDFs and Word files are not text until
+   * something turns them into it — and each file is appended under its own
+   * heading rather than replacing what is already in the file, so a case can be
+   * built out of several exhibits.
+   */
+  const ingest = async (files: FileList | File[]) => {
+    const list = [...files];
+    if (!list.length || reading) return;
+
+    setUploadError(null);
+    let evidence = caseFile.evidence;
+    const took: string[] = [];
+    const refused: string[] = [];
+
+    for (const file of list) {
+      setReading(file.name);
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const res = await fetch("/api/extract", { method: "POST", body });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error ?? "That file could not be read.");
+
+        // A lone file dropped into an empty box needs no label; anything that
+        // sits beside other material gets one so the jury can tell it apart.
+        const labelled = evidence.trim() || list.length > 1;
+        const part = labelled ? `— ${payload.name} —\n${payload.text}` : payload.text;
+        evidence = evidence.trim() ? `${evidence.trim()}\n\n${part}` : part;
+        took.push(payload.truncated ? `${payload.name} (truncated)` : payload.name);
+      } catch (err) {
+        refused.push(`${file.name}: ${err instanceof Error ? err.message : "could not be read."}`);
+      }
+    }
+
+    setReading(null);
+    if (took.length) {
+      onChange({ ...caseFile, evidence });
+      setAttached((prev) => [...prev, ...took]);
+    }
+    if (refused.length) setUploadError(refused.join(" "));
   };
 
   return (
@@ -297,17 +352,98 @@ export default function CaseForm({
 
             {/* 3 — the evidence itself */}
             {step === 3 && (
-              <div className="mt-6">
+              <div
+                className="mt-6 relative"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                  setDragging(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  void ingest(e.dataTransfer.files);
+                }}
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <button
+                    type="button"
+                    disabled={reading !== null}
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-white/12
+                               hover:border-brass/50 hover:bg-brass/5 transition-colors
+                               disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4 text-brass" aria-hidden>
+                      <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 16V4" />
+                        <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
+                        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+                      </g>
+                    </svg>
+                    <span className="mono text-[11px] tracking-[0.18em] uppercase text-bone">
+                      {reading ? `Reading ${reading}…` : "Upload a document"}
+                    </span>
+                  </button>
+                  <span className="mono text-[10px] tracking-[0.14em] uppercase text-muted/60">
+                    PDF · Word (.docx) · text — or drop it in
+                  </span>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files?.length) void ingest(files);
+                      // Cleared so the same file can be picked twice running.
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+
+                {attached.length > 0 && (
+                  <ul className="mb-3 flex flex-wrap gap-2">
+                    {attached.map((name, i) => (
+                      <li
+                        key={`${name}-${i}`}
+                        className="mono text-[10px] tracking-[0.12em] uppercase text-brass/80
+                                   border border-brass/25 bg-brass/5 rounded-full px-3 py-1"
+                      >
+                        {name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {uploadError && <p className="mb-3 text-[13px] text-for leading-relaxed">{uploadError}</p>}
+
                 <textarea
                   ref={evidenceRef}
                   value={caseFile.evidence}
                   onChange={(e) => onChange({ ...caseFile, evidence: e.target.value })}
                   rows={9}
-                  placeholder="Drop the evidence here. Statements, timelines, both sides of the argument."
+                  placeholder="Type or paste the evidence here — statements, timelines, both sides of the argument. Or drop a PDF, Word file, or text file anywhere in this box."
                   className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-[15px] leading-relaxed
                              outline-none focus:border-brass/50 focus:bg-black/45 transition-colors resize-y
                              placeholder:text-white/20"
                 />
+
+                {/* Only raised while something is over the box. */}
+                {dragging && (
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-brass/60
+                               bg-ink/85 flex items-center justify-center"
+                  >
+                    <span className="mono text-[12px] tracking-[0.24em] uppercase text-brass-lit">
+                      Release to file it
+                    </span>
+                  </div>
+                )}
                 <p className="mt-3 mono text-[11px] tracking-[0.16em] uppercase text-muted tabular-nums">
                   {words.toLocaleString()} words
                   <span className="text-muted/50">
