@@ -221,35 +221,42 @@ export default function Home() {
       <header className="mb-5 sm:mb-7">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div className="flex items-center gap-3">
-            <Gavel className="size-8 sm:size-10 text-brass shrink-0" />
+            {/* The gavel carries the court's state: lit while real models are
+                answering, cold and unlit while the room is only rehearsing. */}
+            <span
+              className="relative shrink-0 inline-flex"
+              title={
+                live === null
+                  ? undefined
+                  : live
+                    ? "Court in session — verdicts come from live models"
+                    : "Rehearsal — no API key, so verdicts are simulated"
+              }
+            >
+              <Gavel
+                className={`size-8 sm:size-10 transition-colors duration-700 ${
+                  live === null ? "text-brass/60" : live ? "gavel-live" : "gavel-cold"
+                }`}
+              />
+              {live === true && <span className="gavel-ring" aria-hidden />}
+              <span className="sr-only">
+                {live === null
+                  ? "Checking whether the court is sitting"
+                  : live
+                    ? "Court in session"
+                    : "Rehearsal, no API key"}
+              </span>
+            </span>
             <div>
               <h1 className="display text-[clamp(1.8rem,5vw,3rem)] leading-none">
                 Jury of <span className="text-brass-lit a-flicker">Peers</span>
               </h1>
               <p className="mono text-[11px] tracking-[0.3em] uppercase text-brass/60 mt-1.5">
                 {WORDS[bench.length] ?? bench.length} mind{bench.length === 1 ? "" : "s"} · one finding
+                {live === false && <span className="text-muted/60"> · rehearsal</span>}
               </p>
             </div>
           </div>
-
-          {live !== null && (
-            <span
-              className="mono text-[11px] tracking-[0.22em] uppercase px-3 py-1.5 rounded-full border inline-flex items-center gap-2"
-              style={{
-                borderColor: live ? "rgba(55,183,156,0.4)" : "rgba(201,162,39,0.35)",
-                color: live ? "var(--against)" : "var(--brass)",
-              }}
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{
-                  background: "currentColor",
-                  animation: live ? "tick 1.6s ease-in-out infinite" : undefined,
-                }}
-              />
-              {live ? "Court in session" : "Rehearsal · no API key"}
-            </span>
-          )}
         </div>
         <div className="rule mt-4" />
       </header>

@@ -349,6 +349,39 @@ button:disabled {
   animation: sweep 2.6s ease-in-out infinite;
 }
 
+/* ── The mark's own state ─────────────────────────────────────────────────
+ * The gavel says whether the court is sitting: lit and breathing when real
+ * models are answering, cold and still when the room is only rehearsing.
+ */
+.gavel-live {
+  color: var(--brass-lit);
+  animation: gavel-glow 4.2s ease-in-out infinite;
+}
+.gavel-cold {
+  color: var(--brass);
+  opacity: 0.4;
+  filter: saturate(0.35);
+}
+/* The strike still ringing — one slow ring off the block. */
+.gavel-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 1px solid var(--brass);
+  animation: ring-pulse 4.2s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes gavel-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px rgba(240, 212, 120, 0.2));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px rgba(240, 212, 120, 0.55));
+  }
+}
+
 .thinking-ring {
   position: absolute;
   inset: -4px;
