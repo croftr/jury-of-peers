@@ -9,6 +9,7 @@ export default function VerdictPanel({
   verdicts,
   failures,
   onReset,
+  resetLabel = "Empanel a new jury",
   onSelect,
 }: {
   jurors: Juror[];
@@ -17,6 +18,8 @@ export default function VerdictPanel({
   verdicts: JurorVerdict[];
   failures: Map<number, string>;
   onReset: () => void;
+  /** What the button under the seal offers to do next. */
+  resetLabel?: string;
   onSelect: (jurorId: number) => void;
 }) {
   const tone = tally.majority === 0 ? "var(--for)" : "var(--against)";
@@ -179,7 +182,7 @@ export default function VerdictPanel({
           className="mono text-[10px] tracking-[0.26em] uppercase px-6 py-3 rounded-lg border border-white/12
                      text-muted hover:text-brass-lit hover:border-brass/50 transition-colors"
         >
-          Empanel a new jury
+          {resetLabel}
         </button>
       </div>
     </section>

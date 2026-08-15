@@ -67,6 +67,44 @@ export interface JurorExplanation {
   usage?: { promptTokens: number; completionTokens: number; costUsd?: number };
 }
 
+/**
+ * A completed case, written to the archive once the room has spoken.
+ *
+ * Self-contained on purpose: the bench and its standing instructions are
+ * snapshotted rather than referenced, so a case decided today still replays
+ * correctly after the juror roster or the model line-up changes.
+ */
+export interface ArchivedCase {
+  id: string;
+  /** ISO 8601, set by the server so the clock is the same for every record. */
+  savedAt: string;
+  caseFile: CaseFile;
+  /** The bench as it stood, in seat order. */
+  jurors: Juror[];
+  /** Standing instructions the case ran under, keyed by juror id. */
+  instructions: Record<number, string>;
+  verdicts: JurorVerdict[];
+  failures: JurorFailure[];
+  tally: Tally;
+}
+
+/** The one-line view of a case, kept beside it so the list page reads cheaply. */
+export interface CaseSummary {
+  id: string;
+  savedAt: string;
+  title: string;
+  /** How many jurors returned a finding — the count the verdict actually rests on. */
+  jurorCount: number;
+  /** How many seats were empanelled. Differs from jurorCount when a model failed. */
+  benchSize: number;
+  /** The headline finding: an option label, or "Hung jury". */
+  verdict: string;
+  /** e.g. "8–4", majority first. */
+  split: string;
+  hung: boolean;
+  majority: VerdictChoice;
+}
+
 export interface Tally {
   counts: [number, number];
   majority: VerdictChoice;

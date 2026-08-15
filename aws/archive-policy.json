@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadWriteArchivedCases",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::robs-jury-of-peers/cases/*",
+        "arn:aws:s3:::robs-jury-of-peers/summaries/*"
+      ]
+    },
+    {
+      "Sid": "ListArchivedCases",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::robs-jury-of-peers",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["cases/", "cases/*", "summaries/", "summaries/*"]
+        }
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ import type { Phase } from "@/components/JurorSeat";
 import { tally as computeTally } from "@/lib/deliberate";
 import { getJuror } from "@/lib/jurors";
 import { seatedJurors, useJuryConfig } from "@/lib/juryConfig";
-import type { CaseFile, JurorExplanation, JurorVerdict } from "@/lib/types";
+import type { CaseFile, JurorExplanation, JurorFailure, JurorVerdict } from "@/lib/types";
 
 const EMPTY: CaseFile = {
   title: "",
@@ -32,6 +32,7 @@ export default function Home() {
   const [askErrors, setAskErrors] = useState<Map<number, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<boolean | null>(null);
+  const [filed, setFiled] = useState<"stored" | "skipped" | "failed" | null>(null);
   const { config } = useJuryConfig();
   const runId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -60,13 +61,14 @@ export default function Home() {
     setFailures(new Map());
     setExplanations(new Map());
     setAskErrors(new Map());
+    setFiled(null);
     setPhase("deliberating");
     boxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
     // Twelve independent jurors, twelve independent models, twelve independent
     // requests. One slow or broken model costs only its own seat.
-    const returned = await Promise.all(
-      bench.map(async (juror): Promise<boolean> => {
+    const settled = await Promise.all(
+      bench.map(async (juror): Promise<JurorVerdict | JurorFailure> => {
         try {
           const res = await fetch("/api/verdict", {
             method: "POST",
@@ -80,30 +82,60 @@ export default function Home() {
           });
           const payload = await res.json();
           if (!res.ok) throw new Error(payload?.error ?? "This juror could not be reached.");
+          const verdict = payload as JurorVerdict;
           if (runId.current === run) {
-            const verdict = payload as JurorVerdict;
             setVerdicts((prev) => new Map(prev).set(verdict.jurorId, verdict));
           }
-          return true;
+          return verdict;
         } catch (err) {
-          if (runId.current !== run) return false;
           const message = err instanceof Error ? err.message : "This juror could not be reached.";
-          setFailures((prev) => new Map(prev).set(juror.id, message));
-          return false;
+          if (runId.current === run) {
+            setFailures((prev) => new Map(prev).set(juror.id, message));
+          }
+          return { jurorId: juror.id, message };
         }
       }),
     );
 
     if (runId.current !== run) return;
 
+    const returned = settled.filter((r): r is JurorVerdict => "choice" in r);
+    const empty = settled.filter((r): r is JurorFailure => !("choice" in r));
+
     // Nobody returned — there is no verdict to present, so say why instead.
-    if (!returned.some(Boolean)) {
+    if (!returned.length) {
       setError(
         "No juror returned a finding. Check that OPENROUTER_API_KEY is set and that the account has credit.",
       );
       setPhase("idle");
       return;
     }
+
+    // The room has spoken, so the case goes in the book. Filed from here rather
+    // than from the verdict panel: this is the one place that has seen the whole
+    // run, and it happens once, not on every re-render of the result.
+    void (async () => {
+      try {
+        const res = await fetch("/api/cases", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            caseFile,
+            bench: bench.map((j) => j.id),
+            instructions: config.instructions,
+            verdicts: returned,
+            failures: empty,
+          }),
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error ?? "The case could not be archived.");
+        if (runId.current === run) setFiled(payload?.stored ? "stored" : "skipped");
+      } catch {
+        // A case that cannot be filed is still a case that was decided — the
+        // verdict stands whatever the archive does.
+        if (runId.current === run) setFiled("failed");
+      }
+    })();
 
     // A beat of silence before the foreperson stands.
     setTimeout(() => {
@@ -119,6 +151,7 @@ export default function Home() {
     setAskErrors(new Map());
     setPhase("idle");
     setError(null);
+    setFiled(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -202,13 +235,20 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-5 flex justify-center">
+        <div className="mt-5 flex flex-wrap justify-center items-center gap-x-5 gap-y-2">
           <Link
             href="/jury"
             className="mono text-[10px] tracking-[0.2em] uppercase text-muted hover:text-brass-lit
                        transition-colors underline underline-offset-4 decoration-dotted"
           >
             Choose your jury ({bench.length} of 12 seated)
+          </Link>
+          <Link
+            href="/archive"
+            className="mono text-[10px] tracking-[0.2em] uppercase text-muted hover:text-brass-lit
+                       transition-colors underline underline-offset-4 decoration-dotted"
+          >
+            Past cases
           </Link>
         </div>
       </header>
@@ -281,6 +321,22 @@ export default function Home() {
             onReset={reset}
             onSelect={setSelected}
           />
+          {filed && (
+            <p className="mt-4 text-center mono text-[9px] tracking-[0.2em] uppercase text-muted/60">
+              {filed === "stored" ? (
+                <>
+                  Filed ·{" "}
+                  <Link href="/archive" className="text-brass/80 hover:text-brass-lit transition-colors">
+                    past cases
+                  </Link>
+                </>
+              ) : filed === "failed" ? (
+                "The archive refused this case — the verdict stands, but it was not recorded"
+              ) : (
+                "Not archived · no bucket configured"
+              )}
+            </p>
+          )}
         </div>
       )}
 
@@ -290,6 +346,13 @@ export default function Home() {
           Findings are generated by language models · no juror is a real person ·
           nothing here is legal advice
         </p>
+        <a
+          href="/logout"
+          className="mono text-[9px] tracking-[0.24em] uppercase text-muted/50 hover:text-brass-lit
+                     transition-colors underline underline-offset-4 decoration-dotted mt-3 inline-block"
+        >
+          Leave the court
+        </a>
       </footer>
 
       {selectedJuror && (
@@ -298,6 +361,7 @@ export default function Home() {
           verdict={verdicts.get(selectedJuror.id)}
           failure={failures.get(selectedJuror.id)}
           caseFile={caseFile}
+          instruction={config.instructions[selectedJuror.id]}
           explanation={explanations.get(selectedJuror.id)}
           asking={asking === selectedJuror.id}
           askError={askErrors.get(selectedJuror.id)}

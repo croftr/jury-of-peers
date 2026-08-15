@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import JurorAvatar from "./JurorAvatar";
 import { slugFor } from "@/lib/jurors";
-import { useJuryConfig } from "@/lib/juryConfig";
 import { modelFor } from "@/lib/models";
 import type { CaseFile, Juror, JurorExplanation, JurorVerdict } from "@/lib/types";
 
@@ -13,6 +12,7 @@ export default function JurorDossier({
   verdict,
   failure,
   caseFile,
+  instruction,
   explanation,
   asking,
   askError,
@@ -23,16 +23,17 @@ export default function JurorDossier({
   verdict?: JurorVerdict;
   failure?: string;
   caseFile: CaseFile;
+  /** The standing instruction this juror sat under for *this* case. */
+  instruction?: string;
   explanation?: JurorExplanation;
-  asking: boolean;
+  asking?: boolean;
   askError?: string;
-  onAsk: (jurorId: number, question: string) => void;
+  /** Omitted for an archived case, where the jury has long since gone home. */
+  onAsk?: (jurorId: number, question: string) => void;
   onClose: () => void;
 }) {
   const [question, setQuestion] = useState("");
   const model = modelFor(juror.id);
-  const { config } = useJuryConfig();
-  const instruction = config.instructions[juror.id];
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -159,7 +160,7 @@ export default function JurorDossier({
               <div className="my-6 rule" />
 
               <p className="mono text-[10px] tracking-[0.24em] uppercase text-muted">
-                Put it to them
+                {onAsk ? "Put it to them" : "On the record"}
               </p>
 
               {explanation && (
@@ -185,35 +186,44 @@ export default function JurorDossier({
 
               {askError && <p className="mt-3 text-sm text-for">{askError}</p>}
 
-              <div className="mt-3 flex gap-2">
-                <input
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !asking) onAsk(juror.id, question);
-                  }}
-                  maxLength={500}
-                  disabled={asking}
-                  placeholder={
-                    explanation ? "Ask something else…" : "Ask your own question, or just press Explain"
-                  }
-                  className="flex-1 min-w-0 bg-black/30 border border-white/8 rounded-lg px-3 py-2.5 text-sm
-                             outline-none focus:border-brass/50 transition-colors placeholder:text-white/20
-                             disabled:opacity-50"
-                />
-                <button
-                  onClick={() => onAsk(juror.id, question)}
-                  disabled={asking}
-                  className="mono text-[10px] tracking-[0.16em] uppercase px-4 rounded-lg border border-brass/45
-                             text-brass-lit hover:bg-brass/10 transition-colors shrink-0
-                             disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {asking ? "Asking…" : question.trim() ? "Ask" : "Explain"}
-                </button>
-              </div>
-              <p className="mt-2 mono text-[9px] tracking-[0.12em] uppercase text-muted/50">
-                Puts the question to {juror.alias} again — costs a fraction of a cent
-              </p>
+              {onAsk ? (
+                <>
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !asking) onAsk(juror.id, question);
+                      }}
+                      maxLength={500}
+                      disabled={asking}
+                      placeholder={
+                        explanation ? "Ask something else…" : "Ask your own question, or just press Explain"
+                      }
+                      className="flex-1 min-w-0 bg-black/30 border border-white/8 rounded-lg px-3 py-2.5 text-sm
+                                 outline-none focus:border-brass/50 transition-colors placeholder:text-white/20
+                                 disabled:opacity-50"
+                    />
+                    <button
+                      onClick={() => onAsk(juror.id, question)}
+                      disabled={asking}
+                      className="mono text-[10px] tracking-[0.16em] uppercase px-4 rounded-lg border border-brass/45
+                                 text-brass-lit hover:bg-brass/10 transition-colors shrink-0
+                                 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {asking ? "Asking…" : question.trim() ? "Ask" : "Explain"}
+                    </button>
+                  </div>
+                  <p className="mt-2 mono text-[9px] tracking-[0.12em] uppercase text-muted/50">
+                    Puts the question to {juror.alias} again — costs a fraction of a cent
+                  </p>
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-muted leading-relaxed">
+                  This case has been decided and filed. What {juror.alias} said stands
+                  as it was said — the jury cannot be recalled to answer for it.
+                </p>
+              )}
             </>
           ) : failure ? (
             <>
