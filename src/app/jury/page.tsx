@@ -12,14 +12,13 @@ function costPerCase(model: JurorModel): number {
   return (1200 * model.inPerM + 350 * model.outPerM) / 1_000_000;
 }
 
-type SortKey = "seat" | "cost" | "context" | "seated";
+type SortKey = "seat" | "cost" | "context";
 type Direction = "asc" | "desc";
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "seat", label: "Seat order" },
   { key: "cost", label: "Cost per case" },
   { key: "context", label: "Context window" },
-  { key: "seated", label: "Seated first" },
 ];
 
 /** The direction each sort should open with — cheapest first, biggest window first. */
@@ -27,7 +26,6 @@ const OPENS: Record<SortKey, Direction> = {
   seat: "asc",
   cost: "asc",
   context: "desc",
-  seated: "desc",
 };
 
 export default function JuryPage() {
@@ -45,15 +43,13 @@ export default function JuryPage() {
           return m ? costPerCase(m) : 0;
         case "context":
           return m?.context ?? 0;
-        case "seated":
-          return config.seated.includes(id) ? 1 : 0;
         default:
           return id;
       }
     };
     // Seat order breaks every tie, so equal values stay in a stable, familiar order.
     return [...JURORS].sort((a, b) => sign * (value(a.id) - value(b.id)) || a.id - b.id);
-  }, [sort, direction, config.seated]);
+  }, [sort, direction]);
 
   const chooseSort = (key: SortKey) => {
     if (key === sort) setDirection((d) => (d === "asc" ? "desc" : "asc"));
@@ -161,11 +157,10 @@ export default function JuryPage() {
               onClick={() => chooseSort(key)}
               aria-pressed={active}
               title={active ? "Click again to reverse" : undefined}
-              className={`mono text-[9px] tracking-[0.16em] uppercase px-3 py-2 rounded-md border transition-colors ${
-                active
+              className={`mono text-[9px] tracking-[0.16em] uppercase px-3 py-2 rounded-md border transition-colors ${active
                   ? "border-brass/50 text-brass-lit bg-brass/10"
                   : "border-white/10 text-muted hover:text-bone hover:border-white/25"
-              }`}
+                }`}
             >
               {label}
               {active && (
@@ -219,11 +214,10 @@ export default function JuryPage() {
 
                     <button
                       onClick={() => toggleSeat(juror.id)}
-                      className={`mono text-[9px] tracking-[0.18em] uppercase px-3 py-2 rounded-md border transition-colors shrink-0 ${
-                        seated
+                      className={`mono text-[9px] tracking-[0.18em] uppercase px-3 py-2 rounded-md border transition-colors shrink-0 ${seated
                           ? "border-brass/50 text-brass-lit bg-brass/10 hover:bg-brass/20"
                           : "border-white/12 text-muted hover:text-bone hover:border-white/30"
-                      }`}
+                        }`}
                     >
                       {seated ? "Seated" : "Excused"}
                     </button>
@@ -300,9 +294,8 @@ function Stat({
     <div>
       <dt className="mono text-[9px] tracking-[0.2em] uppercase text-muted/60">{label}</dt>
       <dd
-        className={`mt-1 text-sm tabular-nums ${
-          strong ? "text-bone" : warn ? "text-brass" : "text-bone/75"
-        }`}
+        className={`mt-1 text-sm tabular-nums ${strong ? "text-bone" : warn ? "text-brass" : "text-bone/75"
+          }`}
       >
         {value}
       </dd>

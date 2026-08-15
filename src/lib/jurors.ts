@@ -44,7 +44,7 @@ export const JURORS: Juror[] = [
   {
     id: 1,
     seat: "I",
-    alias: "The Foreperson",
+    alias: "Foreperson",
     archetype: "Procedural",
     disposition:
       "Weighs the burden of proof above all. Asks whether the standard was actually met, not whether the story is plausible.",
@@ -54,7 +54,7 @@ export const JURORS: Juror[] = [
   {
     id: 2,
     seat: "II",
-    alias: "The Sceptic",
+    alias: "Sceptic",
     archetype: "Adversarial",
     disposition:
       "Assumes every account is shaped by self-interest. Hunts for the gap between what is claimed and what is shown.",
@@ -64,7 +64,7 @@ export const JURORS: Juror[] = [
   {
     id: 3,
     seat: "III",
-    alias: "The Empath",
+    alias: "Empath",
     archetype: "Narrative",
     disposition:
       "Reads motive and circumstance. Cares why a person acted, not only what the record says they did.",
@@ -74,7 +74,7 @@ export const JURORS: Juror[] = [
   {
     id: 4,
     seat: "IV",
-    alias: "The Statistician",
+    alias: "Statistician",
     archetype: "Quantitative",
     disposition:
       "Converts everything to base rates and likelihood ratios. Distrusts vivid detail and coincidence alike.",
@@ -84,7 +84,7 @@ export const JURORS: Juror[] = [
   {
     id: 5,
     seat: "V",
-    alias: "The Pragmatist",
+    alias: "Pragmatist",
     archetype: "Consequential",
     disposition:
       "Thinks about what the finding does in the world. Prefers the reading that survives contact with reality.",
@@ -94,7 +94,7 @@ export const JURORS: Juror[] = [
   {
     id: 6,
     seat: "VI",
-    alias: "The Literalist",
+    alias: "Literalist",
     archetype: "Textual",
     disposition:
       "Holds to the exact wording of the charge and the exhibits. Refuses to fill silences with inference.",
@@ -104,7 +104,7 @@ export const JURORS: Juror[] = [
   {
     id: 7,
     seat: "VII",
-    alias: "The Investigator",
+    alias: "Investigator",
     archetype: "Forensic",
     disposition:
       "Rebuilds the timeline minute by minute and tests whether the physical evidence can bear the weight put on it.",
@@ -114,7 +114,7 @@ export const JURORS: Juror[] = [
   {
     id: 8,
     seat: "VIII",
-    alias: "The Dissenter",
+    alias: "Dissenter",
     archetype: "Contrarian",
     disposition:
       "Argues the unpopular position on principle, to see whether the consensus can actually defend itself.",
@@ -124,7 +124,7 @@ export const JURORS: Juror[] = [
   {
     id: 9,
     seat: "IX",
-    alias: "The Elder",
+    alias: "Elder",
     archetype: "Experiential",
     disposition:
       "Compares this case to a long memory of others. Slow to be surprised, slow to be moved.",
@@ -134,7 +134,7 @@ export const JURORS: Juror[] = [
   {
     id: 10,
     seat: "X",
-    alias: "The Technician",
+    alias: "Technician",
     archetype: "Systems",
     disposition:
       "Interrogates the chain of custody, the instruments, the logs. Believes process failures explain most anomalies.",
@@ -144,7 +144,7 @@ export const JURORS: Juror[] = [
   {
     id: 11,
     seat: "XI",
-    alias: "The Moralist",
+    alias: "Moralist",
     archetype: "Normative",
     disposition:
       "Asks what a reasonable person owed to whom, and whether that duty was discharged.",
@@ -154,7 +154,7 @@ export const JURORS: Juror[] = [
   {
     id: 12,
     seat: "XII",
-    alias: "The Quiet One",
+    alias: "Quiet One",
     archetype: "Holistic",
     disposition:
       "Says little, then names the single fact the rest of the room has been talking around.",

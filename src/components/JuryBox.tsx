@@ -36,10 +36,12 @@ export default function JuryBox({
 
   return (
     <section className="courtroom relative">
-      <div className="ct-jury lg:w-[clamp(20rem,27vw,22.5rem)]">
-        {controls && <div className="mb-2.5 px-1 text-center">{controls}</div>}
+      {/* Wide enough for four fixed-size seats a row — the seats never shrink,
+          so the box is sized to them rather than the other way round. */}
+      <div className="ct-jury lg:w-[23rem]">
+        {controls && <div className="mb-3 px-1 text-center">{controls}</div>}
 
-        <div className="panel rounded-2xl px-3 pt-4 pb-5 relative overflow-hidden">
+        <div className="panel rounded-2xl px-2 sm:px-3 pt-4 pb-5 relative overflow-hidden">
           {/* the light over the box, and the rail they sit behind */}
           <div
             className="absolute inset-x-6 -top-10 h-24 pointer-events-none"
@@ -50,7 +52,7 @@ export default function JuryBox({
           />
           <div className="rail mx-2 mb-4" />
 
-          <div className="flex flex-wrap justify-center gap-x-2 gap-y-3">
+          <div className="flex flex-wrap justify-center gap-x-1.5 gap-y-3">
             {jurors.map((juror, i) => (
               <div key={juror.id} className="a-rise" style={{ animationDelay: `${i * 55}ms` }}>
                 <JurorSeat
@@ -67,7 +69,7 @@ export default function JuryBox({
           </div>
 
           {seated > 0 && (
-            <p className="mono text-[9px] tracking-[0.2em] uppercase text-muted/45 text-center mt-4">
+            <p className="mono text-[11px] tracking-[0.18em] uppercase text-muted/55 text-center mt-4">
               {phase === "idle"
                 ? "Seated and waiting"
                 : phase === "verdict"

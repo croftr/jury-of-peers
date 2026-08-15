@@ -53,7 +53,7 @@ export default function VerdictPanel({
         <div className="h-px" style={{ background: `linear-gradient(90deg,transparent,${tone},transparent)` }} />
 
         <div className="px-6 sm:px-10 py-10 text-center">
-          <p className="mono text-[10px] tracking-[0.34em] uppercase text-muted">
+          <p className="mono text-[12px] tracking-[0.34em] uppercase text-muted">
             In the matter of
           </p>
           <p className="display text-lg mt-1 text-bone/80">
@@ -71,7 +71,7 @@ export default function VerdictPanel({
             </div>
           </div>
 
-          <p className="mono text-xs tracking-[0.22em] uppercase text-bone/70">
+          <p className="mono text-[13px] tracking-[0.22em] uppercase text-bone/70">
             {tally.hung
               ? `Deadlocked ${split} — the room will not move`
               : tally.unanimous
@@ -82,7 +82,7 @@ export default function VerdictPanel({
           </p>
 
           {failures.size > 0 && (
-            <p className="mono text-[9px] tracking-[0.18em] uppercase text-for/80 mt-3">
+            <p className="mono text-[11px] tracking-[0.18em] uppercase text-for/80 mt-3">
               {failures.size} of {jurors.length} seats empty · verdict returned by the{" "}
               {verdicts.length} jurors who answered
             </p>
@@ -111,7 +111,7 @@ export default function VerdictPanel({
 
           {/* conviction strength */}
           <div className="mt-8 max-w-md mx-auto">
-            <div className="flex justify-between mono text-[9px] tracking-[0.2em] uppercase text-muted mb-2">
+            <div className="flex justify-between mono text-[11px] tracking-[0.2em] uppercase text-muted mb-2">
               <span>Conviction of the majority</span>
               <span className="tabular-nums">{Math.round(tally.strength * 100)}%</span>
             </div>
@@ -130,17 +130,17 @@ export default function VerdictPanel({
 
         <div className="grid sm:grid-cols-2 border-t border-white/8">
           <div className="p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-white/8">
-            <p className="mono text-[10px] tracking-[0.24em] uppercase text-muted mb-3">
+            <p className="mono text-[12px] tracking-[0.24em] uppercase text-muted mb-3">
               What the room kept returning to
             </p>
             <p className="display text-2xl">{topPivot}</p>
-            <p className="text-xs text-muted mt-2">
+            <p className="text-[13px] text-muted mt-2">
               Raised by {pivotCount} of {verdicts.length} jurors.
             </p>
           </div>
 
           <div className="p-6 sm:p-8">
-            <p className="mono text-[10px] tracking-[0.24em] uppercase text-muted mb-3">
+            <p className="mono text-[12px] tracking-[0.24em] uppercase text-muted mb-3">
               {dissenters.length ? "The dissent" : "No dissent"}
             </p>
             {dissenters.length ? (
@@ -151,9 +151,9 @@ export default function VerdictPanel({
                     <li key={d.jurorId}>
                       <button
                         onClick={() => onSelect(d.jurorId)}
-                        className="text-sm text-bone/85 hover:text-brass-lit transition-colors text-left"
+                        className="text-[15px] text-bone/85 hover:text-brass-lit transition-colors text-left"
                       >
-                        <span className="mono text-[10px] text-muted mr-2">{j.seat}</span>
+                        <span className="mono text-[12px] text-muted mr-2">{j.seat}</span>
                         {j.alias} — {caseFile.options[d.choice]}
                       </button>
                     </li>
@@ -161,7 +161,7 @@ export default function VerdictPanel({
                 })}
               </ul>
             ) : (
-              <p className="text-sm text-muted">
+              <p className="text-[15px] text-muted">
                 {verdicts.length === 1
                   ? "The only juror empanelled decided it alone."
                   : `All ${verdicts.length} arrived at the same finding. That is rarer than it sounds.`}
@@ -172,14 +172,14 @@ export default function VerdictPanel({
       </div>
 
       <div className="mt-6 flex flex-col items-center gap-3">
-        <p className="mono text-[9px] tracking-[0.2em] uppercase text-muted/60 tabular-nums">
+        <p className="mono text-[11px] tracking-[0.2em] uppercase text-muted/60 tabular-nums">
           {simulated
             ? "Simulated deliberation · no models called"
             : `Deliberation cost $${cost.toFixed(4)}`}
         </p>
         <button
           onClick={onReset}
-          className="mono text-[10px] tracking-[0.26em] uppercase px-6 py-3 rounded-lg border border-white/12
+          className="mono text-[12px] tracking-[0.26em] uppercase px-6 py-3 rounded-lg border border-white/12
                      text-muted hover:text-brass-lit hover:border-brass/50 transition-colors"
         >
           {resetLabel}

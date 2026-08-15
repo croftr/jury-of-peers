@@ -52,8 +52,9 @@ export default function JurorSeat({
             : juror.alias
       }
     >
+      {/* Fixed at every width: a juror you cannot see the face of is no juror. */}
       <div
-        className={`relative size-[clamp(40px,7.6vw,84px)] ${deliberating ? "a-breathe" : ""}`}
+        className={`relative size-16 ${deliberating ? "a-breathe" : ""}`}
         style={{ animationDelay: `${(index % 6) * 260}ms`, color: tone }}
       >
         {/* hover halo — the seats are clickable, so say so on approach */}
@@ -122,19 +123,19 @@ export default function JurorSeat({
         {/* seat numeral */}
         <span
           className="mono absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-px rounded
-                     text-[9px] tracking-[0.14em] bg-ink border border-white/10 text-muted"
+                     text-[10px] tracking-[0.14em] bg-ink border border-white/10 text-muted"
         >
           {juror.seat}
         </span>
       </div>
 
-      <div className="h-9 w-[clamp(44px,8vw,92px)] flex flex-col items-center justify-start">
+      <div className="h-10 w-[78px] flex flex-col items-center justify-start">
         {failed ? (
-          <span className="mono text-[9px] tracking-[0.12em] uppercase text-muted/70 pt-1 text-center leading-tight a-rise">
+          <span className="mono text-[11px] tracking-[0.1em] uppercase text-muted/70 pt-1 text-center leading-tight a-rise">
             Unreachable
           </span>
         ) : deliberating ? (
-          <span className="flex gap-1 pt-2" aria-label="deliberating">
+          <span className="flex gap-1 pt-2.5" aria-label="deliberating">
             {[0, 1, 2].map((d) => (
               <span
                 key={d}
@@ -147,16 +148,16 @@ export default function JurorSeat({
           </span>
         ) : decided ? (
           <span
-            className="mono text-[9px] tracking-[0.12em] uppercase text-center leading-tight a-rise px-1"
+            className="mono text-[10px] tracking-[0.08em] uppercase text-center leading-tight a-rise px-0.5"
             style={{ color: tone }}
           >
             {options[verdict!.choice]}
             <span className="block text-muted/70 mt-0.5">
-              {Math.round(verdict!.confidence * 100)}% sure
+              {Math.round(verdict!.confidence * 100)}%
             </span>
           </span>
         ) : (
-          <span className="mono text-[9px] tracking-[0.12em] uppercase text-muted/60 pt-1 text-center leading-tight">
+          <span className="mono text-[11px] tracking-[0.06em] uppercase text-muted/70 pt-1 text-center leading-tight">
             {juror.alias}
           </span>
         )}

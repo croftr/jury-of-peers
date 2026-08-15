@@ -67,11 +67,11 @@ export default function DeliberationWell({
         <div className="relative flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="size-1.5 rounded-full bg-for" style={{ animation: "tick 1.1s ease-in-out infinite" }} />
-            <span className="mono text-[10px] tracking-[0.28em] uppercase text-brass-lit a-flicker">
+            <span className="mono text-[12px] tracking-[0.28em] uppercase text-brass-lit a-flicker">
               Jury deliberating
             </span>
           </div>
-          <span className="mono text-[11px] text-muted tabular-nums">
+          <span className="mono text-[13px] text-muted tabular-nums">
             {mm}:{ss} · {returned}/{total} returned
             {failed > 0 && <span className="text-for"> · {failed} lost</span>}
           </span>
@@ -90,7 +90,7 @@ export default function DeliberationWell({
           {returned === 0 && <div className="absolute inset-0 bg-white/6" />}
         </div>
 
-        <div className="relative mt-2 flex justify-between mono text-[9px] tracking-[0.14em] uppercase">
+        <div className="relative mt-2 flex justify-between mono text-[11px] tracking-[0.14em] uppercase">
           <span style={{ color: "var(--for)" }}>
             {options[0]} · {counts[0]}
           </span>
@@ -99,7 +99,7 @@ export default function DeliberationWell({
           </span>
         </div>
 
-        <p key={murmur} className="relative mt-4 text-center text-sm text-muted italic a-rise display">
+        <p key={murmur} className="relative mt-4 text-center text-base text-muted italic a-rise display">
           {MURMURS[murmur]}
         </p>
       </div>

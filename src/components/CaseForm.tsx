@@ -1,12 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CaseFile } from "@/lib/types";
 
-const PRESETS: { key: string; label: string; options: [string, string] }[] = [
-  { key: "criminal", label: "Criminal trial", options: ["Guilty", "Not guilty"] },
-  { key: "civil", label: "Civil dispute", options: ["For the claimant", "For the respondent"] },
-  { key: "debate", label: "Debate", options: ["Proposition", "Opposition"] },
+const PRESETS: { key: string; label: string; blurb: string; options: [string, string] }[] = [
+  {
+    key: "criminal",
+    label: "Criminal trial",
+    blurb: "A charge to be proved, or not.",
+    options: ["Guilty", "Not guilty"],
+  },
+  {
+    key: "civil",
+    label: "Civil dispute",
+    blurb: "Two parties, one wrong to apportion.",
+    options: ["For the claimant", "For the respondent"],
+  },
+  {
+    key: "debate",
+    label: "Debate",
+    blurb: "A motion, argued both ways.",
+    options: ["Proposition", "Opposition"],
+  },
 ];
 
 const SAMPLE: CaseFile = {
@@ -27,6 +42,42 @@ EVIDENCE FOR THE DEFENCE
 8. No forensic trace of the defendant was recovered from the point of entry, and the padlock shows tool marks inconsistent with the defendant's toolkit.`,
 };
 
+/** 0 is the closed folder; 1–3 are the questions the clerk asks in order. */
+type Step = 0 | 1 | 2 | 3;
+
+const STEPS: { n: 1 | 2 | 3; label: string; question: string; hint: string }[] = [
+  {
+    n: 1,
+    label: "The matter",
+    question: "What is this case called?",
+    hint: "A line the jury will see at the top of the file.",
+  },
+  {
+    n: 2,
+    label: "The finding",
+    question: "What are they deciding between?",
+    hint: "Pick the shape of the case, then reword the two findings if you like.",
+  },
+  {
+    n: 3,
+    label: "The evidence",
+    question: "What should the jury read?",
+    hint: "Statements, timelines, both sides — they know only what you give them.",
+  },
+];
+
+function Gavel({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden>
+      <g stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
+        <path d="M20.5 17.5 32 29" />
+        <path d="M9 38h26" />
+      </g>
+    </svg>
+  );
+}
+
 export default function CaseForm({
   caseFile,
   onChange,
@@ -40,123 +91,283 @@ export default function CaseForm({
   busy: boolean;
   benchCount?: number;
 }) {
+  const [step, setStep] = useState<Step>(0);
   const [preset, setPreset] = useState("criminal");
+  const titleRef = useRef<HTMLInputElement>(null);
+  const evidenceRef = useRef<HTMLTextAreaElement>(null);
+
+  // Each question takes the cursor when it comes up, so the whole file can be
+  // filled in without touching the mouse.
+  useEffect(() => {
+    if (step === 1) titleRef.current?.focus();
+    if (step === 3) evidenceRef.current?.focus();
+  }, [step]);
+
+  const titled = caseFile.title.trim().length > 0;
   const words = caseFile.evidence.trim() ? caseFile.evidence.trim().split(/\s+/).length : 0;
-  const ready = words > 0 && !busy && (benchCount === undefined || benchCount > 0);
+  const noJurors = benchCount === 0;
+  const ready = words > 0 && !busy && !noJurors;
+
+  const open = (to: Step = 1) => setStep(to);
+  const back = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+  const next = () => setStep((s) => (s < 3 ? ((s + 1) as Step) : s));
+
+  const sample = () => {
+    setPreset("criminal");
+    onChange(SAMPLE);
+    setStep(3);
+  };
 
   return (
     <section className="panel rounded-2xl p-6 sm:p-8 relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px rule" />
 
-      <header className="flex items-baseline justify-between gap-4 mb-5">
-        <h2 className="display text-3xl">The case file</h2>
-        <button
-          type="button"
-          onClick={() => {
-            setPreset("criminal");
-            onChange(SAMPLE);
-          }}
-          className="mono text-[10px] tracking-[0.18em] uppercase text-muted hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted"
-        >
-          Try a sample
-        </button>
-      </header>
+      {/* ── The closed folder ───────────────────────────────────────────── */}
+      {step === 0 && (
+        <div className="a-rise flex flex-col items-center text-center py-6 sm:py-10">
+          <h2 className="display text-3xl sm:text-4xl">The case file</h2>
+          <p className="mt-3 text-[15px] text-muted max-w-sm leading-relaxed">
+            {titled || words > 0
+              ? "A file is open on the desk. Take it up where you left it, or start again."
+              : "Three questions and the jury goes out: what the matter is called, what they are deciding, and what they get to read."}
+          </p>
 
-      <label className="block mb-4">
-        <input
-          value={caseFile.title}
-          onChange={(e) => onChange({ ...caseFile, title: e.target.value })}
-          placeholder="Name the matter…"
-          className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 display text-xl
-                     outline-none focus:border-brass/50 focus:bg-black/45 transition-colors placeholder:text-white/20"
-        />
-      </label>
-
-      <div className="mb-4">
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => {
-                setPreset(p.key);
-                onChange({ ...caseFile, options: [...p.options] as [string, string] });
-              }}
-              className={`mono text-[10px] tracking-[0.16em] uppercase px-3 py-2 rounded-md border transition-colors ${
-                preset === p.key
-                  ? "border-brass/60 text-brass-lit bg-brass/10"
-                  : "border-white/10 text-muted hover:text-bone hover:border-white/25"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {[0, 1].map((i) => (
-            <div key={i} className="relative">
-              <span
-                className="absolute left-3 top-1/2 -translate-y-1/2 size-2 rounded-full"
-                style={{ background: i === 0 ? "var(--for)" : "var(--against)" }}
-              />
-              <input
-                value={caseFile.options[i]}
-                onChange={(e) => {
-                  const options = [...caseFile.options] as [string, string];
-                  options[i] = e.target.value;
-                  setPreset("custom");
-                  onChange({ ...caseFile, options });
-                }}
-                className="w-full bg-black/30 border border-white/8 rounded-lg pl-8 pr-3 py-2.5 text-sm
-                           outline-none focus:border-brass/50 transition-colors"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <label className="block">
-        <textarea
-          value={caseFile.evidence}
-          onChange={(e) => onChange({ ...caseFile, evidence: e.target.value })}
-          rows={9}
-          placeholder="Drop the evidence here. Statements, timelines, both sides of the argument — the jury reads only what you give it."
-          className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-sm leading-relaxed
-                     outline-none focus:border-brass/50 focus:bg-black/45 transition-colors resize-y
-                     placeholder:text-white/20"
-        />
-      </label>
-
-      <div className="mt-5 flex items-center justify-between gap-4">
-        <span className="mono text-[10px] tracking-[0.16em] uppercase text-muted tabular-nums">
-          {words.toLocaleString()} words
-        </span>
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={onSubmit}
-          title={benchCount === 0 ? "Empanel at least one juror to deliberate" : undefined}
-          className="group relative px-7 py-3.5 rounded-lg overflow-hidden border border-brass/45
-                     disabled:opacity-35 disabled:cursor-not-allowed
-                     enabled:hover:border-brass enabled:hover:bg-brass/10 transition-colors"
-        >
-          <span className="mono text-[11px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-2.5">
-            <svg viewBox="0 0 48 48" fill="none" className="gavel size-4" aria-hidden>
-              <g stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
-                <path d="M20.5 17.5 32 29" />
-                <path d="M9 38h26" />
-              </g>
-            </svg>
-            {busy ? "Jury is out" : benchCount === 0 ? "No jurors seated" : "Send them out"}
-          </span>
-          {ready && (
+          <button
+            type="button"
+            onClick={() => open(1)}
+            className="group relative mt-7 px-8 py-4 sm:px-10 sm:py-5 rounded-xl overflow-hidden
+                       border border-brass/45 hover:border-brass hover:bg-brass/10 transition-colors"
+          >
+            <span className="mono text-[13px] sm:text-[14px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-3">
+              <Gavel className="gavel size-5" />
+              {titled || words > 0 ? "Take up the file" : "Enter a case to be heard"}
+            </span>
             <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-brass/25 to-transparent a-sweep" />
             </span>
-          )}
-        </button>
-      </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={sample}
+            className="mt-5 mono text-[12px] tracking-[0.18em] uppercase text-muted hover:text-brass-lit
+                       transition-colors underline underline-offset-4 decoration-dotted"
+          >
+            Or try a sample case
+          </button>
+        </div>
+      )}
+
+      {/* ── The three questions ─────────────────────────────────────────── */}
+      {step > 0 && (
+        <div>
+          <header className="mb-6">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="display text-2xl sm:text-3xl">The case file</h2>
+              <span className="mono text-[11px] tracking-[0.2em] uppercase text-muted tabular-nums">
+                Step {step} of 3
+              </span>
+            </div>
+
+            {/* Where the clerk is up to. Answered steps are clickable. */}
+            <ol className="mt-4 flex items-center gap-2 sm:gap-3">
+              {STEPS.map((s) => {
+                const state = s.n === step ? "here" : s.n < step ? "done" : "ahead";
+                return (
+                  <li key={s.n} className="flex-1">
+                    <button
+                      type="button"
+                      disabled={state === "ahead"}
+                      onClick={() => setStep(s.n)}
+                      className={`w-full text-left group ${state === "ahead" ? "cursor-default" : ""}`}
+                    >
+                      <span
+                        className={`block h-px transition-colors ${
+                          state === "ahead" ? "bg-white/10" : "bg-brass/60"
+                        }`}
+                      />
+                      <span
+                        className={`mt-2 block mono text-[10px] sm:text-[11px] tracking-[0.18em] uppercase transition-colors ${
+                          state === "here"
+                            ? "text-brass-lit"
+                            : state === "done"
+                              ? "text-muted group-hover:text-bone"
+                              : "text-white/25"
+                        }`}
+                      >
+                        {s.n}. {s.label}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </header>
+
+          <div key={step} className="a-rise min-h-[19rem] sm:min-h-[21rem] flex flex-col">
+            <h3 className="display text-2xl sm:text-[1.75rem] leading-snug">
+              {STEPS[step - 1].question}
+            </h3>
+            <p className="mt-1.5 text-[14px] text-muted leading-relaxed">{STEPS[step - 1].hint}</p>
+
+            {/* 1 — the name of the matter */}
+            {step === 1 && (
+              <div className="mt-6">
+                <input
+                  ref={titleRef}
+                  value={caseFile.title}
+                  onChange={(e) => onChange({ ...caseFile, title: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && titled) next();
+                  }}
+                  placeholder="The Matter of…"
+                  className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3.5 display text-xl sm:text-2xl
+                             outline-none focus:border-brass/50 focus:bg-black/45 transition-colors placeholder:text-white/20"
+                />
+                <button
+                  type="button"
+                  onClick={sample}
+                  className="mt-4 mono text-[11px] tracking-[0.18em] uppercase text-muted hover:text-brass-lit
+                             transition-colors underline underline-offset-4 decoration-dotted"
+                >
+                  Fill it with a sample case
+                </button>
+              </div>
+            )}
+
+            {/* 2 — what they are choosing between */}
+            {step === 2 && (
+              <div className="mt-6">
+                <div className="grid sm:grid-cols-3 gap-2.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => {
+                        setPreset(p.key);
+                        onChange({ ...caseFile, options: [...p.options] as [string, string] });
+                      }}
+                      className={`text-left px-4 py-3 rounded-lg border transition-colors ${
+                        preset === p.key
+                          ? "border-brass/60 bg-brass/10"
+                          : "border-white/10 hover:border-white/25"
+                      }`}
+                    >
+                      <span
+                        className={`mono text-[11px] tracking-[0.16em] uppercase block ${
+                          preset === p.key ? "text-brass-lit" : "text-muted"
+                        }`}
+                      >
+                        {p.label}
+                      </span>
+                      <span className="mt-1 block text-[13px] leading-snug text-muted/70">{p.blurb}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <p className="mt-6 mono text-[11px] tracking-[0.2em] uppercase text-muted/70">
+                  The two findings
+                </p>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[0, 1].map((i) => (
+                    <div key={i} className="relative">
+                      <span
+                        className="absolute left-3 top-1/2 -translate-y-1/2 size-2 rounded-full"
+                        style={{ background: i === 0 ? "var(--for)" : "var(--against)" }}
+                      />
+                      <input
+                        value={caseFile.options[i]}
+                        onChange={(e) => {
+                          const options = [...caseFile.options] as [string, string];
+                          options[i] = e.target.value;
+                          setPreset("custom");
+                          onChange({ ...caseFile, options });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") next();
+                        }}
+                        className="w-full bg-black/30 border border-white/8 rounded-lg pl-8 pr-3 py-2.5 text-[15px]
+                                   outline-none focus:border-brass/50 transition-colors"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3 — the evidence itself */}
+            {step === 3 && (
+              <div className="mt-6">
+                <textarea
+                  ref={evidenceRef}
+                  value={caseFile.evidence}
+                  onChange={(e) => onChange({ ...caseFile, evidence: e.target.value })}
+                  rows={9}
+                  placeholder="Drop the evidence here. Statements, timelines, both sides of the argument."
+                  className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-[15px] leading-relaxed
+                             outline-none focus:border-brass/50 focus:bg-black/45 transition-colors resize-y
+                             placeholder:text-white/20"
+                />
+                <p className="mt-3 mono text-[11px] tracking-[0.16em] uppercase text-muted tabular-nums">
+                  {words.toLocaleString()} words
+                  <span className="text-muted/50">
+                    {" · "}
+                    {caseFile.title.trim() || "Untitled matter"}
+                    {" · "}
+                    {caseFile.options[0]} / {caseFile.options[1]}
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Back, and the way forward ─────────────────────────────── */}
+          <div className="mt-6 pt-5 border-t border-white/8 flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={step === 1 ? () => setStep(0) : back}
+              className="mono text-[12px] tracking-[0.2em] uppercase text-muted hover:text-bone transition-colors"
+            >
+              ← Back
+            </button>
+
+            {step < 3 ? (
+              <button
+                type="button"
+                disabled={step === 1 && !titled}
+                onClick={next}
+                className="px-6 py-3 rounded-lg border border-brass/45 transition-colors
+                           disabled:opacity-35 disabled:cursor-not-allowed
+                           enabled:hover:border-brass enabled:hover:bg-brass/10"
+              >
+                <span className="mono text-[12px] tracking-[0.24em] uppercase text-brass-lit">
+                  Next →
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!ready}
+                onClick={onSubmit}
+                title={noJurors ? "Empanel at least one juror to deliberate" : undefined}
+                className="group relative px-7 py-3.5 rounded-lg overflow-hidden border border-brass/45
+                           disabled:opacity-35 disabled:cursor-not-allowed
+                           enabled:hover:border-brass enabled:hover:bg-brass/10 transition-colors"
+              >
+                <span className="mono text-[13px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-2.5">
+                  <Gavel className="gavel size-4" />
+                  {busy ? "Jury is out" : noJurors ? "No jurors seated" : "Send them out"}
+                </span>
+                {ready && (
+                  <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-brass/25 to-transparent a-sweep" />
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

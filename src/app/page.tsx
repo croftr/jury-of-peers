@@ -226,7 +226,7 @@ export default function Home() {
               <h1 className="display text-[clamp(1.8rem,5vw,3rem)] leading-none">
                 Jury of <span className="text-brass-lit a-flicker">Peers</span>
               </h1>
-              <p className="mono text-[9px] tracking-[0.3em] uppercase text-brass/60 mt-1.5">
+              <p className="mono text-[11px] tracking-[0.3em] uppercase text-brass/60 mt-1.5">
                 {WORDS[bench.length] ?? bench.length} mind{bench.length === 1 ? "" : "s"} · one finding
               </p>
             </div>
@@ -234,7 +234,7 @@ export default function Home() {
 
           {live !== null && (
             <span
-              className="mono text-[9px] tracking-[0.22em] uppercase px-3 py-1.5 rounded-full border inline-flex items-center gap-2"
+              className="mono text-[11px] tracking-[0.22em] uppercase px-3 py-1.5 rounded-full border inline-flex items-center gap-2"
               style={{
                 borderColor: live ? "rgba(55,183,156,0.4)" : "rgba(201,162,39,0.35)",
                 color: live ? "var(--against)" : "var(--brass)",
@@ -265,7 +265,7 @@ export default function Home() {
           controls={
             <Link
               href="/jury"
-              className="mono text-[10px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+              className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
                          transition-colors underline underline-offset-4 decoration-dotted"
             >
               The jury ({bench.length}/{JURORS.length})
@@ -274,7 +274,7 @@ export default function Home() {
           wellControls={
             <Link
               href="/archive"
-              className="mono text-[10px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+              className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
                          transition-colors underline underline-offset-4 decoration-dotted"
             >
               Past cases
@@ -290,7 +290,7 @@ export default function Home() {
                 busy={false}
                 benchCount={bench.length}
               />
-              {error && <p className="mt-4 text-center text-sm text-for">{error}</p>}
+              {error && <p className="mt-4 text-center text-base text-for">{error}</p>}
             </div>
           )}
 
@@ -322,7 +322,7 @@ export default function Home() {
                 onSelect={setSelected}
               />
               {filed && (
-                <p className="mt-4 text-center mono text-[9px] tracking-[0.2em] uppercase text-muted/60">
+                <p className="mt-4 text-center mono text-[11px] tracking-[0.2em] uppercase text-muted/60">
                   {filed === "stored" ? (
                     <Link href="/archive" className="text-brass/80 hover:text-brass-lit transition-colors">
                       Filed with the past cases
@@ -341,7 +341,7 @@ export default function Home() {
 
       <footer className="mt-12 text-center">
         <div className="rule w-40 mx-auto mb-4" />
-        <p className="mono text-[9px] tracking-[0.24em] uppercase text-muted/50">
+        <p className="mono text-[11px] tracking-[0.24em] uppercase text-muted/50">
           Twelve models · no juror is a real person ·{" "}
           <a
             href="/logout"
