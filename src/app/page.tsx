@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CaseForm from "@/components/CaseForm";
 import DeliberationWell from "@/components/DeliberationWell";
+import Gavel from "@/components/Gavel";
 import JuryBox from "@/components/JuryBox";
 import JurorDossier from "@/components/JurorDossier";
 import RetrialComparison from "@/components/RetrialComparison";
@@ -29,20 +30,6 @@ const EMPTY: CaseFile = {
 };
 
 const WORDS = ["no", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
-
-/** The court's mark. Head, handle, and the block it lands on. */
-function Gavel({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden>
-      <g stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
-        <path d="M20.5 17.5 32 29" />
-        <path d="M9 38h26" />
-        <path d="M12 34h20" />
-      </g>
-    </svg>
-  );
-}
 
 export default function Home() {
   /*
@@ -421,7 +408,8 @@ export default function Home() {
               }
             >
               <Gavel
-                className={`size-8 sm:size-10 transition-colors duration-700 ${
+                withBlock
+                className={`size-8 sm:size-10 shrink-0 transition-colors duration-700 ${
                   live === null ? "text-brass/60" : live ? "gavel-live" : "gavel-cold"
                 }`}
               />

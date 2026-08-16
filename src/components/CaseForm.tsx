@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Gavel from "./Gavel";
 import { MAX_EVIDENCE_BYTES, cannotRead, estimateCost, estimateTokens } from "@/lib/estimate";
 import type { CaseFile, Juror } from "@/lib/types";
 
@@ -69,18 +70,6 @@ const STEPS: { n: 1 | 2 | 3; label: string; question: string; hint: string }[] =
     hint: "Statements, timelines, both sides — they know only what you give them.",
   },
 ];
-
-function Gavel({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden>
-      <g stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="8" y="7" width="15" height="10" rx="2.5" transform="rotate(-32 8 7)" />
-        <path d="M20.5 17.5 32 29" />
-        <path d="M9 38h26" />
-      </g>
-    </svg>
-  );
-}
 
 export default function CaseForm({
   caseFile,
@@ -221,15 +210,23 @@ export default function CaseForm({
               : "Three questions and the jury goes out: what the matter is called, what they are deciding, and what they get to read."}
           </p>
 
+          {/* Full width on a phone so the label has the whole line to sit on,
+              and the wide tracking eases off — letterspacing that reads as
+              considered at 640px reads as a wrap at 375px. */}
           <button
             type="button"
             onClick={() => open(1)}
-            className="group relative mt-7 px-8 py-4 sm:px-10 sm:py-5 rounded-xl overflow-hidden
-                       border border-brass/45 hover:border-brass hover:bg-brass/10 transition-colors"
+            className="group relative mt-7 w-full sm:w-auto px-4 py-4 sm:px-10 sm:py-5 rounded-xl
+                       overflow-hidden border border-brass/45 hover:border-brass hover:bg-brass/10
+                       transition-colors"
           >
-            <span className="mono text-[13px] sm:text-[14px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-3">
-              <Gavel className="gavel size-5" />
-              {titled || words > 0 ? "Take up the file" : "Enter a case to be heard"}
+            <span className="mono text-[13px] sm:text-[14px] tracking-[0.14em] sm:tracking-[0.28em] uppercase text-brass-lit inline-flex items-center justify-center gap-2.5 sm:gap-3">
+              {/* shrink-0, or flexbox squeezes a square mark into a tall slot
+                  and the gavel letterboxes itself into something lopsided. */}
+              <Gavel className="gavel size-5 shrink-0" />
+              <span className="text-balance">
+                {titled || words > 0 ? "Take up the file" : "Enter a case to be heard"}
+              </span>
             </span>
             <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-brass/25 to-transparent a-sweep" />
@@ -570,8 +567,8 @@ export default function CaseForm({
                            disabled:opacity-35 disabled:cursor-not-allowed
                            enabled:hover:border-brass enabled:hover:bg-brass/10 transition-colors"
               >
-                <span className="mono text-[13px] tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-2.5">
-                  <Gavel className="gavel size-4" />
+                <span className="mono text-[13px] tracking-[0.18em] sm:tracking-[0.28em] uppercase text-brass-lit inline-flex items-center gap-2.5">
+                  <Gavel className="gavel size-4 shrink-0" />
                   {busy ? "Jury is out" : noJurors ? "No jurors seated" : "Send them out"}
                 </span>
                 {ready && (
