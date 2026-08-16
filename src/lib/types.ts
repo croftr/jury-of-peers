@@ -110,8 +110,29 @@ export interface ArchivedCase {
    * finally landed, so everything that reads a case can ignore this.
    */
   firstRound?: JurorVerdict[];
+  /**
+   * The case this one was a retrial of, if it was. A retrial is a new record —
+   * it was a different jury on a different day — but the lineage is kept so the
+   * two can be read against each other.
+   */
+  retrialOf?: string;
   failures: JurorFailure[];
   tally: Tally;
+}
+
+/**
+ * How one juror came down on one case.
+ *
+ * Kept in the summary rather than only in the full record, so the juror record
+ * can be computed across the whole archive without reading every case file —
+ * which is the difference between a page that loads and one that does not.
+ */
+export interface SummaryFinding {
+  jurorId: number;
+  choice: VerdictChoice;
+  confidence: number;
+  /** Present only when this juror changed their finding in the second round. */
+  moved?: boolean;
 }
 
 /** The one-line view of a case, kept beside it so the list page reads cheaply. */
@@ -133,6 +154,12 @@ export interface CaseSummary {
   rounds?: 1 | 2;
   /** How many jurors changed their finding in the second round. */
   moved?: number;
+  /**
+   * Every juror who returned a finding, and what they found. Absent on cases
+   * filed before the juror record existed — the record page says so rather than
+   * quietly counting a smaller archive than the one on screen.
+   */
+  findings?: SummaryFinding[];
 }
 
 export interface Tally {

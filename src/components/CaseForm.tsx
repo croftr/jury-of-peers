@@ -91,6 +91,8 @@ export default function CaseForm({
   bench = [],
   instructions = {},
   live,
+  startAt = 0,
+  retrial = false,
 }: {
   caseFile: CaseFile;
   onChange: (c: CaseFile) => void;
@@ -102,8 +104,12 @@ export default function CaseForm({
   instructions?: Record<number, string>;
   /** Whether real models are wired up — a simulated jury costs nothing to warn about. */
   live?: boolean | null;
+  /** Where the folder opens. A case that arrives already written opens at the evidence. */
+  startAt?: Step;
+  /** This case has been heard before and is being put to a new jury. */
+  retrial?: boolean;
 }) {
-  const [step, setStep] = useState<Step>(0);
+  const [step, setStep] = useState<Step>(startAt);
   const [preset, setPreset] = useState("criminal");
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState<string | null>(null);
@@ -251,6 +257,13 @@ export default function CaseForm({
                 Step {step} of 3
               </span>
             </div>
+
+            {retrial && (
+              <p className="mt-3 mono text-[10px] tracking-[0.2em] uppercase text-brass/80">
+                Retrial · this case has been heard before, and the verdicts will be set against
+                each other
+              </p>
+            )}
 
             {/* Where the clerk is up to. Answered steps are clickable. */}
             <ol className="mt-4 flex items-center gap-2 sm:gap-3">

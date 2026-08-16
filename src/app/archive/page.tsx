@@ -15,6 +15,12 @@ function filedOn(iso: string): string {
   })} · ${at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+interface Page {
+  enabled: boolean;
+  cases: CaseSummary[];
+  nextCursor?: string;
+}
+
 export default function ArchivePage() {
   const [cases, setCases] = useState<CaseSummary[] | null>(null);
   const [enabled, setEnabled] = useState(true);
@@ -23,6 +29,9 @@ export default function ArchivePage() {
   /** The ids the open modal is asking about — null when no modal is up. */
   const [pending, setPending] = useState<string[] | null>(null);
   const [striking, setStriking] = useState(false);
+  /** Where the next page starts. Absent once the whole archive is on screen. */
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,12 +39,13 @@ export default function ArchivePage() {
       .then(async (res) => {
         const payload = await res.json();
         if (!res.ok) throw new Error(payload?.error ?? "The archive could not be reached.");
-        return payload as { enabled: boolean; cases: CaseSummary[] };
+        return payload as Page;
       })
       .then((payload) => {
         if (cancelled) return;
         setEnabled(payload.enabled);
         setCases(payload.cases);
+        setCursor(payload.nextCursor);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -46,6 +56,34 @@ export default function ArchivePage() {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Fetch the next screenful.
+   *
+   * The list reads a page at a time because the summaries are separate objects:
+   * showing twenty-five rows used to mean fetching every case in the bucket.
+   */
+  const more = useCallback(async () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/cases?before=${encodeURIComponent(cursor)}`);
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error ?? "The archive could not be reached.");
+      const page = payload as Page;
+      // Guard against a case arriving twice if one was struck in between.
+      setCases((prev) => {
+        const seen = new Set((prev ?? []).map((c) => c.id));
+        return [...(prev ?? []), ...page.cases.filter((c) => !seen.has(c.id))];
+      });
+      setCursor(page.nextCursor);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The archive could not be reached.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, loadingMore]);
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -127,6 +165,13 @@ export default function ArchivePage() {
           Every case this court has decided, newest first. Open one to sit back
           down in the box and read the findings as they came in.
         </p>
+        <Link
+          href="/record"
+          className="inline-block mt-5 mono text-[10px] tracking-[0.24em] uppercase text-brass/80
+                     hover:text-brass-lit transition-colors underline underline-offset-4 decoration-dotted"
+        >
+          The jurors&apos; record →
+        </Link>
       </header>
 
       {error && <p className="mb-6 text-center text-sm text-for">{error}</p>}
@@ -177,12 +222,15 @@ export default function ArchivePage() {
               >
                 Delete selected
               </button>
+              {/* Named for what it actually does. Nothing can be struck that
+                  was not on screen when the button was pressed, so with more
+                  cases still unloaded "all" would be a lie. */}
               <button
                 onClick={() => setPending(all.map((c) => c.id))}
                 className="mono text-[10px] tracking-[0.2em] uppercase px-3 py-1.5 rounded-md border
                            border-white/12 text-muted hover:text-for hover:border-for/40 transition-colors"
               >
-                Delete all
+                {cursor ? "Delete all shown" : "Delete all"}
               </button>
             </div>
           </div>
@@ -269,6 +317,20 @@ export default function ArchivePage() {
               );
             })}
           </ul>
+
+          {cursor && (
+            <div className="mt-5 flex justify-center">
+              <button
+                onClick={more}
+                disabled={loadingMore}
+                className="mono text-[10px] tracking-[0.24em] uppercase px-6 py-3 rounded-lg border
+                           border-white/12 text-muted hover:text-brass-lit hover:border-brass/50
+                           transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {loadingMore ? "Pulling the next file…" : "Older cases"}
+              </button>
+            </div>
+          )}
         </>
       )}
 

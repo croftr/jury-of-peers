@@ -59,6 +59,37 @@ continues its actual reasoning rather than reconstructing a position from scratc
 is a fresh call you pay for — a few hundredths of a cent — and never happens as part of a
 verdict run.
 
+## Reading the archive back
+
+Past cases are not just a list. Two things read across them:
+
+**Retrial.** Any archived case has **Put it to the jury as it stands now**, which carries the
+evidence back to the court untouched and runs it against whoever is empanelled today. The two
+verdicts are then set against each other: what the room found then and now, who sat both times
+and changed their mind, and who is newly seated or no longer sitting. Round two asks whether
+an argument moves a juror; a retrial asks the different question of whether the finding was
+ever about the case at all, or about who happened to be in the box.
+
+A retrial files a *new* record — a different jury on a different day is a different case — and
+keeps the lineage in `retrialOf`, so each case links back to the one it was tried against. It
+works because the archive snapshots the bench and its standing instructions with every record
+rather than referencing them, so a case decided months ago is still genuinely comparable.
+
+**The jurors' record** at `/record` reads the whole archive at once: how often each juror
+dissented, how often they changed their mind when asked twice, their average confidence, and
+which two jurors agree most and least. A juror who is often alone and always certain is
+telling you something different from one who is often alone and says so.
+
+The statistics come from the summaries, which now carry each juror's finding, so building the
+record does not mean opening every case file. Cases decided before that existed cannot be
+counted, and the page says how many rather than quietly reporting a smaller archive than the
+one on screen.
+
+The list itself pages, twenty-five at a time. It used to fetch every summary in the bucket to
+render one screenful, which was the single most expensive thing this app did and it did it on
+every visit. With older cases still unloaded, **Delete all** is labelled *Delete all shown* —
+nothing can be struck that was not on screen when the button was pressed.
+
 ## How long a case can be
 
 The twelve context windows differ by two orders of magnitude — Phi-4 holds 16k tokens where
@@ -171,6 +202,10 @@ support — verify a replacement the same way before swapping one in.
 | `src/app/jury/[slug]/page.tsx` | One juror's own page |
 | `src/lib/estimate.ts` | Token counts, who can read a case, what a round will cost |
 | `src/lib/rateLimit.ts` | The brake on how fast the app can be made to spend |
+| `src/lib/archive.ts` | The S3 archive — paged listing, summaries, retrieval |
+| `src/lib/record.ts` | The jurors' record, computed across every summary |
+| `src/lib/retrial.ts` | Carrying an archived case back to the court |
+| `src/app/record/page.tsx` | Who dissents, who moves, who agrees with whom |
 | `src/lib/openrouter.ts` | **The juror call** — prompt, JSON schema, lenient parsing; and `requestReconsideration`, the second round |
 | `src/lib/deliberate.ts` | The offline stub engine (`stubVerdict`, `stubReconsideration`) and the aggregation (`tally`) |
 | `src/app/api/verdict/route.ts` | One juror, one request — the client fans out twelve in parallel |

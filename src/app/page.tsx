@@ -6,12 +6,15 @@ import CaseForm from "@/components/CaseForm";
 import DeliberationWell from "@/components/DeliberationWell";
 import JuryBox from "@/components/JuryBox";
 import JurorDossier from "@/components/JurorDossier";
+import RetrialComparison from "@/components/RetrialComparison";
 import VerdictPanel from "@/components/VerdictPanel";
 import type { Phase } from "@/components/JurorSeat";
 import { tally as computeTally } from "@/lib/deliberate";
 import { JURORS, getJuror } from "@/lib/jurors";
 import { seatedJurors, useJuryConfig } from "@/lib/juryConfig";
+import { clearRetrial, peekRetrial } from "@/lib/retrial";
 import type {
+  ArchivedCase,
   CaseFile,
   JurorExplanation,
   JurorFailure,
@@ -42,7 +45,14 @@ function Gavel({ className }: { className?: string }) {
 }
 
 export default function Home() {
-  const [caseFile, setCaseFile] = useState<CaseFile>(EMPTY);
+  /*
+   * A case sent over from the archive to be tried again, read once as this
+   * component initialises. A pure read, so React is free to run it twice; the
+   * forgetting happens in an effect below, because that is the part that
+   * touches the outside world.
+   */
+  const [retrial] = useState(peekRetrial);
+  const [caseFile, setCaseFile] = useState<CaseFile>(retrial?.caseFile ?? EMPTY);
   const [phase, setPhase] = useState<Phase>("idle");
   const [verdicts, setVerdicts] = useState<Map<number, JurorVerdict>>(new Map());
   const [failures, setFailures] = useState<Map<number, string>>(new Map());
@@ -58,6 +68,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<boolean | null>(null);
   const [filed, setFiled] = useState<"stored" | "skipped" | "failed" | null>(null);
+  /** The archived case this run is a retrial of, once its file has been pulled. */
+  const [prior, setPrior] = useState<ArchivedCase | null>(null);
+  /** Set before the old file arrives, so the case is filed as a retrial either way. */
+  const [priorId, setPriorId] = useState<string | null>(retrial?.priorId ?? null);
+  /** A case that arrives already written opens at the evidence, not the closed folder. */
+  const openAt = priorId ? 3 : 0;
   const { config } = useJuryConfig();
   const runId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -84,6 +100,29 @@ export default function Home() {
   const bench = useMemo(() => seatedJurors(config), [config]);
   const list = useMemo(() => [...verdicts.values()], [verdicts]);
   const tally = useMemo(() => computeTally(list), [list]);
+
+  /*
+   * Forget the handoff, and pull the old file to set the new verdict against.
+   * The fetch is deliberately not blocking: the jury can go out without it, and
+   * the comparison is only needed once there is something to compare.
+   */
+  useEffect(() => {
+    if (!retrial) return;
+    clearRetrial();
+
+    let cancelled = false;
+    fetch(`/api/cases/${encodeURIComponent(retrial.priorId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((record: ArchivedCase | null) => {
+        if (!cancelled && record?.id) setPrior(record);
+      })
+      .catch(() => {
+        // The comparison is a bonus. Losing it costs the retrial nothing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retrial]);
 
   // Whether real models are wired up, so the UI can say so before anyone commits
   // a case to a jury that turns out to be simulated.
@@ -118,6 +157,9 @@ export default function Home() {
             verdicts: returned,
             ...(first?.length ? { firstRound: first } : {}),
             ...(filedId.current ? { supersedes: filedId.current } : {}),
+            // A retrial is a new record — a different jury on a different day —
+            // so this keeps the lineage without replacing the old case.
+            ...(priorId ? { retrialOf: priorId } : {}),
             failures: empty,
           }),
         });
@@ -131,7 +173,7 @@ export default function Home() {
         if (runId.current === run) setFiled("failed");
       }
     },
-    [caseFile, bench, config.instructions],
+    [caseFile, bench, config.instructions, priorId],
   );
 
   const charge = useCallback(async () => {
@@ -312,6 +354,10 @@ export default function Home() {
     setError(null);
     setFiled(null);
     filedId.current = null;
+    // Empanelling a new jury ends the retrial: the next case stands on its own,
+    // and the folder closes again rather than opening on the old evidence.
+    setPrior(null);
+    setPriorId(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -440,6 +486,8 @@ export default function Home() {
                 bench={bench}
                 instructions={config.instructions}
                 live={live}
+                startAt={openAt}
+                retrial={Boolean(priorId)}
               />
               {error && <p className="mt-4 text-center text-base text-for">{error}</p>}
             </div>
@@ -478,6 +526,16 @@ export default function Home() {
                 onReset={reset}
                 onSelect={setSelected}
               />
+              {prior && (
+                <RetrialComparison
+                  prior={prior}
+                  caseFile={caseFile}
+                  jurors={bench}
+                  tally={tally}
+                  verdicts={list}
+                  onSelect={setSelected}
+                />
+              )}
               {filed && (
                 <p className="mt-4 text-center mono text-[11px] tracking-[0.2em] uppercase text-muted/60">
                   {filed === "stored" ? (

@@ -56,13 +56,13 @@ export default function JurorDossier({
       aria-modal="true"
     >
       <div
-        className="panel rounded-2xl w-full max-w-lg overflow-hidden a-rise"
+        className="panel rounded-2xl w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden a-rise"
         style={{ boxShadow: `0 40px 120px -50px ${tone}` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="h-px" style={{ background: `linear-gradient(90deg,transparent,${tone},transparent)` }} />
+        <div className="h-px shrink-0" style={{ background: `linear-gradient(90deg,transparent,${tone},transparent)` }} />
 
-        <div className="p-6 sm:p-8">
+        <div className="p-6 sm:p-8 overflow-y-auto min-h-0">
           <div className="flex items-start gap-5">
             <div
               className="size-20 shrink-0 rounded-full overflow-hidden"
@@ -298,7 +298,7 @@ export default function JurorDossier({
           )}
         </div>
 
-        <div className="grid grid-cols-2 border-t border-white/8">
+        <div className="grid grid-cols-2 border-t border-white/8 shrink-0">
           <Link
             href={`/jury/${slugFor(juror)}`}
             className="py-3.5 text-center border-r border-white/8 mono text-[10px] tracking-[0.2em] uppercase

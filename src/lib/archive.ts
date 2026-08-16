@@ -28,8 +28,11 @@ const REGION = process.env.CASES_BUCKET_REGION?.trim() || process.env.AWS_REGION
 /** Points the archive at an S3-compatible store instead of AWS. Unset for S3 proper. */
 const ENDPOINT = process.env.CASES_BUCKET_ENDPOINT?.trim();
 
-/** Beyond this the list page stops being a list. Older cases stay retrievable by id. */
+/** The most cases one request will fetch, however many are asked for. */
 const LIST_LIMIT = 250;
+
+/** A screenful. The list pages from here rather than fetching the archive. */
+const DEFAULT_PAGE = 25;
 
 /*
  * The record ceiling and the evidence limit derived from it live in `estimate.ts`
@@ -105,6 +108,15 @@ export function summarize(record: ArchivedCase): CaseSummary {
     hung: tally.hung,
     majority: tally.majority,
     ...(firstRound ? { rounds: 2 as const, moved } : { rounds: 1 as const }),
+    // Enough of each juror's finding to build their record from summaries alone.
+    // Confidence is rounded: two decimal places is more precision than anyone
+    // reads, and the summaries are fetched by the hundred.
+    findings: record.verdicts.map((v) => ({
+      jurorId: v.jurorId,
+      choice: v.choice,
+      confidence: Math.round(v.confidence * 100) / 100,
+      ...(before.has(v.jurorId) && before.get(v.jurorId) !== v.choice ? { moved: true } : {}),
+    })),
   };
 }
 
@@ -121,6 +133,8 @@ export async function saveCase(
     verdicts: JurorVerdict[];
     firstRound?: JurorVerdict[];
     failures: JurorFailure[];
+    /** The case this was a retrial of, when it was one. */
+    retrialOf?: string;
   },
   /**
    * An existing record to write over, used when the room goes back out: the
@@ -140,6 +154,7 @@ export async function saveCase(
     instructions: input.instructions,
     verdicts: input.verdicts,
     ...(input.firstRound?.length ? { firstRound: input.firstRound } : {}),
+    ...(input.retrialOf && isValidId(input.retrialOf) ? { retrialOf: input.retrialOf } : {}),
     failures: input.failures,
     // Recomputed rather than trusted, so the stored count always matches the
     // stored verdicts however the client got there.
@@ -182,8 +197,15 @@ async function getJson<T>(Key: string): Promise<T | null> {
   }
 }
 
-/** Every archived case, newest first. */
-export async function listCases(): Promise<CaseSummary[]> {
+/**
+ * Every summary key in the bucket, newest first.
+ *
+ * LIST is the cheap half of reading the archive — one request per thousand keys,
+ * and no object bodies — so this always walks the lot. Keys carry a sortable
+ * timestamp, so lexicographic order is chronological order and the newest cases
+ * are simply the tail.
+ */
+async function summaryKeys(): Promise<string[]> {
   const keys: string[] = [];
   let token: string | undefined;
 
@@ -201,12 +223,79 @@ export async function listCases(): Promise<CaseSummary[]> {
     token = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (token);
 
-  // LIST returns ascending; the newest cases are the tail.
-  const newest = keys.slice(-LIST_LIMIT).reverse();
-  const summaries = await Promise.all(newest.map((key) => getJson<CaseSummary>(key)));
+  return keys.reverse();
+}
+
+/**
+ * Fetch summaries a few at a time.
+ *
+ * The GETs are the expensive half, and firing two hundred at once is how a
+ * bucket starts refusing them. Twelve in flight keeps the page quick without
+ * making the archive angry.
+ */
+async function fetchSummaries(keys: string[]): Promise<CaseSummary[]> {
+  const CONCURRENCY = 12;
+  const out: (CaseSummary | null)[] = new Array(keys.length).fill(null);
+  let next = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, keys.length) }, async () => {
+      for (let i = next++; i < keys.length; i = next++) {
+        out[i] = await getJson<CaseSummary>(keys[i]);
+      }
+    }),
+  );
 
   // A summary that has gone missing shouldn't take the whole page down with it.
-  return summaries.filter((s): s is CaseSummary => Boolean(s?.id));
+  return out.filter((s): s is CaseSummary => Boolean(s?.id));
+}
+
+export interface CasePage {
+  cases: CaseSummary[];
+  /** Pass back as `before` for the next page. Absent when there are no more. */
+  nextCursor?: string;
+}
+
+/**
+ * One page of archived cases, newest first.
+ *
+ * Paged because the list only ever shows a screenful: fetching two hundred and
+ * fifty summary objects to render twenty-five of them was the single most
+ * expensive thing this app did, and it did it on every visit.
+ */
+export async function listCases(options: { limit?: number; before?: string } = {}): Promise<CasePage> {
+  const limit = Math.min(Math.max(options.limit ?? DEFAULT_PAGE, 1), LIST_LIMIT);
+  const keys = await summaryKeys();
+
+  // The cursor is the last id of the previous page — everything up to and
+  // including it has already been seen. An id that is no longer there (struck
+  // between one page and the next) simply starts from the top again, which is
+  // the least surprising thing it could do.
+  let start = 0;
+  if (options.before) {
+    const at = keys.indexOf(summaryKey(options.before));
+    if (at !== -1) start = at + 1;
+  }
+
+  const window = keys.slice(start, start + limit);
+  const cases = await fetchSummaries(window);
+  const more = start + limit < keys.length;
+
+  return {
+    cases,
+    ...(more && cases.length ? { nextCursor: cases[cases.length - 1].id } : {}),
+  };
+}
+
+/**
+ * Every summary in the archive, for the juror record.
+ *
+ * Deliberately the expensive read — the record is a statement about the whole
+ * archive, so it has to read the whole archive. It is one page the user asks
+ * for, not one they land on.
+ */
+export async function listAllSummaries(): Promise<CaseSummary[]> {
+  return fetchSummaries(await summaryKeys());
 }
 
 /**

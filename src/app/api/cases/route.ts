@@ -28,6 +28,12 @@ interface Body {
    * lands, so a case heard twice is one record rather than two.
    */
   supersedes?: string;
+  /**
+   * The archived case this one is a retrial of. Unlike `supersedes` this files
+   * a *new* record — a different jury on a different day is a different case —
+   * and only keeps the lineage.
+   */
+  retrialOf?: string;
 }
 
 const text = (value: unknown, limit: number): string =>
@@ -72,14 +78,28 @@ function cleanVerdict(raw: unknown, seated: Set<number>): JurorVerdict | null {
   };
 }
 
-/** GET — every archived case, newest first, as one-line summaries. */
-export async function GET() {
+/**
+ * GET — one page of archived cases, newest first, as one-line summaries.
+ *
+ * `before` is the last id of the previous page. Paged because the list only
+ * shows a screenful, and reading the whole archive to render twenty-five rows
+ * was the most expensive thing this app did.
+ */
+export async function GET(req: Request) {
   if (!archiveEnabled()) {
     return NextResponse.json({ enabled: false, cases: [] });
   }
 
+  const params = new URL(req.url).searchParams;
+  const asked = Number(params.get("limit"));
+  const before = params.get("before") ?? undefined;
+
   try {
-    return NextResponse.json({ enabled: true, cases: await listCases() });
+    const page = await listCases({
+      ...(Number.isInteger(asked) && asked > 0 ? { limit: asked } : {}),
+      ...(before && isValidId(before) ? { before } : {}),
+    });
+    return NextResponse.json({ enabled: true, ...page });
   } catch (err) {
     console.error("Could not read the archive:", err);
     return NextResponse.json(
@@ -217,6 +237,9 @@ export async function POST(req: Request) {
         instructions,
         verdicts,
         ...(firstRound.length ? { firstRound } : {}),
+        ...(typeof body.retrialOf === "string" && isValidId(body.retrialOf)
+          ? { retrialOf: body.retrialOf }
+          : {}),
         failures,
       },
       typeof body.supersedes === "string" && isValidId(body.supersedes)
