@@ -466,13 +466,25 @@ export default function Home() {
             </Link>
           }
           wellControls={
-            <Link
-              href="/archive"
-              className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
-                         transition-colors underline underline-offset-4 decoration-dotted"
-            >
-              Past cases
-            </Link>
+            <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <Link
+                href="/archive"
+                className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                           transition-colors underline underline-offset-4 decoration-dotted"
+              >
+                Past cases
+              </Link>
+              <span aria-hidden className="mono text-[12px] text-muted/30">
+                ·
+              </span>
+              <Link
+                href="/record"
+                className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                           transition-colors underline underline-offset-4 decoration-dotted"
+              >
+                The record
+              </Link>
+            </span>
           }
         >
           {phase === "idle" && (
