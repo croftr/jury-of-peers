@@ -79,8 +79,16 @@ export function isValidId(id: string): boolean {
 
 /** The list view of a case, derived from the record so the two cannot drift. */
 export function summarize(record: ArchivedCase): CaseSummary {
-  const { tally, caseFile } = record;
+  const { tally, caseFile, firstRound } = record;
   const runnerUp = tally.counts[tally.majority === 0 ? 1 : 0];
+
+  // How many jurors actually changed their finding between the two askings.
+  // Counted here rather than stored, so it cannot disagree with the record.
+  const before = new Map(firstRound?.map((v) => [v.jurorId, v.choice]));
+  const moved = firstRound
+    ? record.verdicts.filter((v) => before.has(v.jurorId) && before.get(v.jurorId) !== v.choice)
+        .length
+    : undefined;
 
   return {
     id: record.id,
@@ -92,6 +100,7 @@ export function summarize(record: ArchivedCase): CaseSummary {
     split: `${tally.counts[tally.majority]}–${runnerUp}`,
     hung: tally.hung,
     majority: tally.majority,
+    ...(firstRound ? { rounds: 2 as const, moved } : { rounds: 1 as const }),
   };
 }
 
@@ -100,21 +109,33 @@ export function summarize(record: ArchivedCase): CaseSummary {
  * case behind it would be a dead row in the list, whereas a case with no summary
  * is merely invisible.
  */
-export async function saveCase(input: {
-  caseFile: ArchivedCase["caseFile"];
-  jurors: Juror[];
-  instructions: Record<number, string>;
-  verdicts: JurorVerdict[];
-  failures: JurorFailure[];
-}): Promise<CaseSummary> {
+export async function saveCase(
+  input: {
+    caseFile: ArchivedCase["caseFile"];
+    jurors: Juror[];
+    instructions: Record<number, string>;
+    verdicts: JurorVerdict[];
+    firstRound?: JurorVerdict[];
+    failures: JurorFailure[];
+  },
+  /**
+   * An existing record to write over, used when the room goes back out: the
+   * second round supersedes the first rather than filing the same case twice.
+   * Both objects are overwritten in place, so it is safe to repeat.
+   */
+  existingId?: string,
+): Promise<CaseSummary> {
   const at = new Date();
   const record: ArchivedCase = {
-    id: newId(at),
+    // The id carries the time the case was first filed, so a superseded case
+    // keeps its place in the archive's order rather than jumping to the top.
+    id: existingId && isValidId(existingId) ? existingId : newId(at),
     savedAt: at.toISOString(),
     caseFile: input.caseFile,
     jurors: input.jurors,
     instructions: input.instructions,
     verdicts: input.verdicts,
+    ...(input.firstRound?.length ? { firstRound: input.firstRound } : {}),
     failures: input.failures,
     // Recomputed rather than trusted, so the stored count always matches the
     // stored verdicts however the client got there.

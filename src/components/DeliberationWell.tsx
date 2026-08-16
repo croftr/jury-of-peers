@@ -16,8 +16,23 @@ const MURMURS = [
   "The evidence is read back, line by line.",
 ];
 
+/** The second time out is a different room: they have heard each other now. */
+const SECOND_MURMURS = [
+  "Seat II is reading the dissent again, more slowly.",
+  "Someone concedes a point and immediately qualifies it.",
+  "The minority is asked to put its case once more.",
+  "A juror who was certain an hour ago is no longer certain.",
+  "Two of them have found the same line in the file.",
+  "The foreperson asks whether anyone has moved.",
+  "Somebody says 'that is not what it says' and reaches for the exhibit.",
+  "A long pause, and then: 'I take that point.'",
+  "Seat XI has not changed a word and does not intend to.",
+  "The question is put a second time. Nobody hurries.",
+];
+
 export default function DeliberationWell({
   active,
+  round = 1,
   returned,
   failed,
   total,
@@ -25,6 +40,8 @@ export default function DeliberationWell({
   verdicts,
 }: {
   active: boolean;
+  /** 1 is the silent round; 2 is after the room has been polled. */
+  round?: 1 | 2;
   returned: number;
   failed: number;
   total: number;
@@ -42,11 +59,13 @@ export default function DeliberationWell({
     return () => clearInterval(t);
   }, [active]);
 
+  const murmurs = round === 2 ? SECOND_MURMURS : MURMURS;
+
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => setMurmur((m) => (m + 1) % MURMURS.length), 3200);
+    const t = setInterval(() => setMurmur((m) => (m + 1) % murmurs.length), 3200);
     return () => clearInterval(t);
-  }, [active]);
+  }, [active, murmurs.length]);
 
   if (!active) return null;
 
@@ -68,7 +87,7 @@ export default function DeliberationWell({
           <div className="flex items-center gap-3">
             <span className="size-1.5 rounded-full bg-for" style={{ animation: "tick 1.1s ease-in-out infinite" }} />
             <span className="mono text-[12px] tracking-[0.28em] uppercase text-brass-lit a-flicker">
-              Jury deliberating
+              {round === 2 ? "Jury reconsidering" : "Jury deliberating"}
             </span>
           </div>
           <span className="mono text-[13px] text-muted tabular-nums">
@@ -100,7 +119,7 @@ export default function DeliberationWell({
         </div>
 
         <p key={murmur} className="relative mt-4 text-center text-base text-muted italic a-rise display">
-          {MURMURS[murmur]}
+          {murmurs[murmur % murmurs.length]}
         </p>
       </div>
     </div>

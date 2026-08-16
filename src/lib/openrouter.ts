@@ -1,5 +1,5 @@
 import { costOf, modelFor } from "./models";
-import type { CaseFile, Juror, JurorVerdict, VerdictChoice } from "./types";
+import type { CaseFile, Juror, JurorVerdict, RoomPosition, VerdictChoice } from "./types";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -208,7 +208,193 @@ async function attemptVerdict(
     ...parsed,
     deliberationMs: Date.now() - startedAt,
     source: "live",
+    round: 1,
     // Report what served the request, not what we asked for.
+    model: body.model ?? model.slug,
+    provider: body.provider,
+    usage: {
+      promptTokens,
+      completionTokens,
+      costUsd: costOf(juror.id, promptTokens, completionTokens),
+    },
+  };
+}
+
+/** A juror's own finding, replayed as their previous turn so a follow-up continues it. */
+function ownTurn(caseFile: CaseFile, verdict: JurorVerdict) {
+  return {
+    role: "assistant" as const,
+    content: JSON.stringify({
+      finding: caseFile.options[verdict.choice],
+      confidence: Number(verdict.confidence.toFixed(2)),
+      rationale: verdict.rationale,
+      sticking_point: verdict.pivot,
+    }),
+  };
+}
+
+/** One other juror's argument, long enough to be an argument and no longer. */
+const MAX_ROOM_RATIONALE = 900;
+
+/** What the room said, in seat order — the order is fixed so it carries no lean. */
+function roomReport(
+  caseFile: CaseFile,
+  room: { juror: Juror; position: RoomPosition }[],
+): string {
+  const counts: [number, number] = [0, 0];
+  for (const { position } of room) counts[position.choice]++;
+
+  const voices = room
+    .map(({ juror, position }) => {
+      const rationale = position.rationale.slice(0, MAX_ROOM_RATIONALE).trim();
+      return `Juror ${juror.seat} · ${juror.alias} — ${caseFile.options[position.choice]} (${Math.round(
+        position.confidence * 100,
+      )}% sure)
+Sticking point: ${position.pivot}
+"${rationale}"`;
+    })
+    .join("\n\n");
+
+  return `THE ROOM HAS BEEN POLLED
+
+Setting your own finding aside, the other ${spell(room.length)} juror${room.length === 1 ? "" : "s"} stand at ${caseFile.options[0]} ${counts[0]} — ${caseFile.options[1]} ${counts[1]}.
+
+This is what each of them found, and the argument each of them gave.
+
+${voices}`;
+}
+
+const RECONSIDER_CHARGE = `You have now heard the room. You are asked once more for your finding.
+
+How to weigh what you have just read:
+- A count is not evidence. That the others landed elsewhere is not, by itself, a reason to move. An argument that shows you misread the record is.
+- Change your finding only if a juror has named a fact you overlooked, a reading of the evidence you had not considered, or an error in your own reasoning. If that has happened, say so plainly and say who.
+- Otherwise hold, and name the thing you are holding against — the point that was put to you and did not survive contact with the file.
+- You may keep your finding and move your confidence, up or down. Hearing a good argument you can answer is a reason to be more sure, not less.
+- Do not split the difference, do not soften your rationale to be agreeable, and do not move to make the room tidy. A jury that converges because it wants to agree has decided nothing.
+
+Return the same JSON as before — finding, confidence, rationale, sticking_point — with the rationale now saying, in your own voice, whether anything moved you and what it was, or that nothing did.`;
+
+/**
+ * Ask one juror to reconsider, having heard everyone else.
+ *
+ * This is the round the whole app is for. The juror's first finding is replayed
+ * as their own previous turn, then the polled room is put to them — so a model
+ * that changes its mind is genuinely revising a position it held, not scoring a
+ * fresh case that happens to come with opinions attached.
+ *
+ * The prompt works hard against mere conformity, because the naive version of
+ * this reliably produces it: told only that eleven jurors disagree, models fold.
+ * What is worth measuring is whether an *argument* moves them, so the count is
+ * named as explicitly not being a reason.
+ */
+export async function requestReconsideration(
+  juror: Juror,
+  caseFile: CaseFile,
+  own: JurorVerdict,
+  room: { juror: Juror; position: RoomPosition }[],
+  bench: number,
+  instruction?: string,
+): Promise<JurorVerdict> {
+  try {
+    return await attemptReconsideration(juror, caseFile, own, room, bench, instruction);
+  } catch (err) {
+    if (err instanceof JurorError && err.retryable) {
+      return attemptReconsideration(juror, caseFile, own, room, bench, instruction);
+    }
+    throw err;
+  }
+}
+
+async function attemptReconsideration(
+  juror: Juror,
+  caseFile: CaseFile,
+  own: JurorVerdict,
+  room: { juror: Juror; position: RoomPosition }[],
+  bench: number,
+  instruction?: string,
+): Promise<JurorVerdict> {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) throw new JurorError("OPENROUTER_API_KEY is not set.");
+
+  const model = modelFor(juror.id);
+  if (!model) throw new JurorError(`No model assigned to seat ${juror.seat}.`);
+
+  const startedAt = Date.now();
+
+  let res: Response;
+  try {
+    res = await fetch(ENDPOINT, {
+      method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
+        "X-Title": "Jury of Peers",
+      },
+      body: JSON.stringify({
+        model: model.slug,
+        max_tokens: 1500,
+        messages: [
+          { role: "system", content: systemPrompt(juror, caseFile, bench, instruction) },
+          { role: "user", content: userPrompt(caseFile) },
+          ownTurn(caseFile, own),
+          { role: "user", content: `${roomReport(caseFile, room)}\n\n${RECONSIDER_CHARGE}` },
+        ],
+        response_format: { type: "json_schema", json_schema: schema(caseFile) },
+        provider: { require_parameters: true },
+        ...(model.reasoning === "off"
+          ? { reasoning: { enabled: false } }
+          : model.reasoning === "low"
+            ? { reasoning: { effort: "low" } }
+            : {}),
+      }),
+    });
+  } catch (err) {
+    const reason = err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
+    throw new JurorError(`${model.label} ${reason}.`, true);
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new JurorError(
+      `${model.label} returned ${res.status}. ${extractError(detail)}`.trim(),
+      res.status === 429 || res.status >= 500,
+    );
+  }
+
+  const body = (await res.json()) as {
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+    model?: string;
+    provider?: string;
+    error?: { message?: string };
+  };
+
+  if (body.error) throw new JurorError(`${model.label}: ${body.error.message ?? "upstream error"}`);
+
+  const choice = body.choices?.[0];
+  const content = choice?.message?.content;
+  if (!content?.trim()) {
+    throw new JurorError(
+      choice?.finish_reason === "length"
+        ? `${model.label} ran out of tokens before answering.`
+        : `${model.label} returned an empty finding.`,
+      true,
+    );
+  }
+
+  const parsed = parseVerdict(content, caseFile);
+  const promptTokens = body.usage?.prompt_tokens ?? 0;
+  const completionTokens = body.usage?.completion_tokens ?? 0;
+
+  return {
+    jurorId: juror.id,
+    ...parsed,
+    deliberationMs: Date.now() - startedAt,
+    source: "live",
+    round: 2,
     model: body.model ?? model.slug,
     provider: body.provider,
     usage: {

@@ -42,6 +42,12 @@ export default function ArchivedCasePage() {
     () => new Map((record?.failures ?? []).map((f) => [f.jurorId, f.message])),
     [record],
   );
+  // Present only on a case the room was sent back out on. Empty otherwise, and
+  // the verdict panel then reads exactly as a one-round case always did.
+  const firstRound = useMemo(
+    () => new Map((record?.firstRound ?? []).map((v) => [v.jurorId, v])),
+    [record],
+  );
 
   const selectedJuror = record?.jurors.find((j) => j.id === selected);
 
@@ -122,6 +128,8 @@ export default function ArchivedCasePage() {
               tally={record.tally}
               verdicts={record.verdicts}
               failures={failures}
+              round={firstRound.size > 0 ? 2 : 1}
+              firstRound={firstRound}
               onReset={() => history.back()}
               resetLabel="Back to the record"
               onSelect={setSelected}
@@ -132,6 +140,7 @@ export default function ArchivedCasePage() {
             <JurorDossier
               juror={selectedJuror}
               verdict={verdicts.get(selectedJuror.id)}
+              firstVerdict={firstRound.get(selectedJuror.id)}
               failure={failures.get(selectedJuror.id)}
               caseFile={record.caseFile}
               instruction={record.instructions[selectedJuror.id]}

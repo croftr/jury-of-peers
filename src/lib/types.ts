@@ -40,6 +40,12 @@ export interface JurorVerdict {
   rationale: string;
   /** Key phrase the juror kept returning to during deliberation. */
   pivot: string;
+  /**
+   * Which time of asking produced this finding. 1 is the first, silent round;
+   * 2 is after the room was polled and the juror heard everyone else. Absent
+   * means the first — every verdict written before there was a second round.
+   */
+  round?: 1 | 2;
   /** Wall-clock time this juror took to decide, in ms. */
   deliberationMs: number;
   /** Where the verdict came from: a real model, or the offline stub engine. */
@@ -55,6 +61,20 @@ export interface JurorVerdict {
 export interface JurorFailure {
   jurorId: number;
   message: string;
+}
+
+/**
+ * One other juror's first-round position, as it is put to the room in the
+ * second. Deliberately not a `JurorVerdict`: a juror weighing what the room
+ * said has no business seeing which model said it, how long it took, or what
+ * it cost — only the finding and the argument for it.
+ */
+export interface RoomPosition {
+  jurorId: number;
+  choice: VerdictChoice;
+  confidence: number;
+  rationale: string;
+  pivot: string;
 }
 
 /** A juror's fuller account of their finding, asked for after the verdict. */
@@ -84,6 +104,12 @@ export interface ArchivedCase {
   /** Standing instructions the case ran under, keyed by juror id. */
   instructions: Record<number, string>;
   verdicts: JurorVerdict[];
+  /**
+   * The findings as they stood before the room went back out, present only on
+   * cases that were deliberated twice. `verdicts` always holds where the jury
+   * finally landed, so everything that reads a case can ignore this.
+   */
+  firstRound?: JurorVerdict[];
   failures: JurorFailure[];
   tally: Tally;
 }
@@ -103,6 +129,10 @@ export interface CaseSummary {
   split: string;
   hung: boolean;
   majority: VerdictChoice;
+  /** How many times the room was asked. Absent on cases filed before round two existed. */
+  rounds?: 1 | 2;
+  /** How many jurors changed their finding in the second round. */
+  moved?: number;
 }
 
 export interface Tally {

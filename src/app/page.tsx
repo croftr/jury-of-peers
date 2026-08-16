@@ -11,7 +11,13 @@ import type { Phase } from "@/components/JurorSeat";
 import { tally as computeTally } from "@/lib/deliberate";
 import { JURORS, getJuror } from "@/lib/jurors";
 import { seatedJurors, useJuryConfig } from "@/lib/juryConfig";
-import type { CaseFile, JurorExplanation, JurorFailure, JurorVerdict } from "@/lib/types";
+import type {
+  CaseFile,
+  JurorExplanation,
+  JurorFailure,
+  JurorVerdict,
+  RoomPosition,
+} from "@/lib/types";
 
 const EMPTY: CaseFile = {
   title: "",
@@ -40,6 +46,11 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [verdicts, setVerdicts] = useState<Map<number, JurorVerdict>>(new Map());
   const [failures, setFailures] = useState<Map<number, string>>(new Map());
+  /** Where the room stood before it went back out. Empty until it does. */
+  const [firstRound, setFirstRound] = useState<Map<number, JurorVerdict>>(new Map());
+  const [round, setRound] = useState<1 | 2>(1);
+  /** A juror who could not be reached the second time. They keep their first finding. */
+  const [heldOver, setHeldOver] = useState<Map<number, string>>(new Map());
   const [selected, setSelected] = useState<number | null>(null);
   const [explanations, setExplanations] = useState<Map<number, JurorExplanation>>(new Map());
   const [asking, setAsking] = useState<number | null>(null);
@@ -50,6 +61,8 @@ export default function Home() {
   const { config } = useJuryConfig();
   const runId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
+  /** The archive id of this case, so a second round replaces it rather than filing twice. */
+  const filedId = useRef<string | null>(null);
 
   const bench = useMemo(() => seatedJurors(config), [config]);
   const list = useMemo(() => [...verdicts.values()], [verdicts]);
@@ -68,6 +81,42 @@ export default function Home() {
     };
   }, []);
 
+  /**
+   * Commit the case to the archive.
+   *
+   * Called once when the room first speaks, and again if it goes back out — the
+   * second call supersedes the first record rather than filing the same case
+   * twice, so a case heard twice is one case in the book.
+   */
+  const file = useCallback(
+    async (run: number, returned: JurorVerdict[], empty: JurorFailure[], first?: JurorVerdict[]) => {
+      try {
+        const res = await fetch("/api/cases", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            caseFile,
+            bench: bench.map((j) => j.id),
+            instructions: config.instructions,
+            verdicts: returned,
+            ...(first?.length ? { firstRound: first } : {}),
+            ...(filedId.current ? { supersedes: filedId.current } : {}),
+            failures: empty,
+          }),
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error ?? "The case could not be archived.");
+        if (typeof payload?.summary?.id === "string") filedId.current = payload.summary.id;
+        if (runId.current === run) setFiled(payload?.stored ? "stored" : "skipped");
+      } catch {
+        // A case that cannot be filed is still a case that was decided — the
+        // verdict stands whatever the archive does.
+        if (runId.current === run) setFiled("failed");
+      }
+    },
+    [caseFile, bench, config.instructions],
+  );
+
   const charge = useCallback(async () => {
     if (bench.length === 0) {
       setError("No jurors are seated. Choose your jury to empanel at least one juror.");
@@ -78,9 +127,13 @@ export default function Home() {
     setError(null);
     setVerdicts(new Map());
     setFailures(new Map());
+    setFirstRound(new Map());
+    setHeldOver(new Map());
+    setRound(1);
     setExplanations(new Map());
     setAskErrors(new Map());
     setFiled(null);
+    filedId.current = null;
     setPhase("deliberating");
     boxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -133,44 +186,107 @@ export default function Home() {
     // The room has spoken, so the case goes in the book. Filed from here rather
     // than from the verdict panel: this is the one place that has seen the whole
     // run, and it happens once, not on every re-render of the result.
-    void (async () => {
-      try {
-        const res = await fetch("/api/cases", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            caseFile,
-            bench: bench.map((j) => j.id),
-            instructions: config.instructions,
-            verdicts: returned,
-            failures: empty,
-          }),
-        });
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload?.error ?? "The case could not be archived.");
-        if (runId.current === run) setFiled(payload?.stored ? "stored" : "skipped");
-      } catch {
-        // A case that cannot be filed is still a case that was decided — the
-        // verdict stands whatever the archive does.
-        if (runId.current === run) setFiled("failed");
-      }
-    })();
+    void file(run, returned, empty);
 
     // A beat of silence before the foreperson stands.
     setTimeout(() => {
       if (runId.current === run) setPhase("verdict");
     }, 900);
-  }, [caseFile, bench, config.instructions]);
+  }, [caseFile, bench, config.instructions, file]);
+
+  /**
+   * Send the room back out.
+   *
+   * Every juror who returned a finding is shown what the others found and the
+   * argument each of them gave, then asked once more. The seats go dark while
+   * they think, exactly as they did the first time — but each juror's own first
+   * finding is held, so a model that fails on the second asking keeps its vote
+   * rather than costing the room a seat it already had.
+   */
+  const reconsider = useCallback(async () => {
+    const first = [...verdicts.values()];
+    // Nobody to hear is nobody to reconsider in front of.
+    if (first.length < 2 || phase !== "verdict") return;
+
+    const run = ++runId.current;
+    setFirstRound(new Map(verdicts));
+    setRound(2);
+    setVerdicts(new Map());
+    setHeldOver(new Map());
+    setExplanations(new Map());
+    setAskErrors(new Map());
+    setFiled(null);
+    setError(null);
+    setPhase("deliberating");
+    boxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    // Only the finding and the argument travel. Which model held a view, what it
+    // cost and how long it took are the court's business, not the room's.
+    const positions: RoomPosition[] = first.map((v) => ({
+      jurorId: v.jurorId,
+      choice: v.choice,
+      confidence: v.confidence,
+      rationale: v.rationale,
+      pivot: v.pivot,
+    }));
+
+    const settled = await Promise.all(
+      first.map(async (own): Promise<JurorVerdict> => {
+        try {
+          const res = await fetch("/api/reconsider", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jurorId: own.jurorId,
+              caseFile,
+              own,
+              // Everyone but this juror — nobody argues with themselves.
+              room: positions.filter((p) => p.jurorId !== own.jurorId),
+              bench: bench.length,
+              instruction: config.instructions[own.jurorId],
+            }),
+          });
+          const payload = await res.json();
+          if (!res.ok) throw new Error(payload?.error ?? "This juror could not be reached.");
+          const revised = payload as JurorVerdict;
+          if (runId.current === run) {
+            setVerdicts((prev) => new Map(prev).set(revised.jurorId, revised));
+          }
+          return revised;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "This juror could not be reached.";
+          if (runId.current === run) {
+            setVerdicts((prev) => new Map(prev).set(own.jurorId, own));
+            setHeldOver((prev) => new Map(prev).set(own.jurorId, message));
+          }
+          return own;
+        }
+      }),
+    );
+
+    if (runId.current !== run) return;
+
+    const empty = [...failures].map(([jurorId, message]) => ({ jurorId, message }));
+    void file(run, settled, empty, first);
+
+    setTimeout(() => {
+      if (runId.current === run) setPhase("verdict");
+    }, 900);
+  }, [verdicts, phase, caseFile, bench, config.instructions, failures, file]);
 
   const reset = useCallback(() => {
     runId.current++;
     setVerdicts(new Map());
     setFailures(new Map());
+    setFirstRound(new Map());
+    setHeldOver(new Map());
+    setRound(1);
     setExplanations(new Map());
     setAskErrors(new Map());
     setPhase("idle");
     setError(null);
     setFiled(null);
+    filedId.current = null;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -308,9 +424,10 @@ export default function Home() {
               </p>
               <DeliberationWell
                 active
+                round={round}
                 returned={verdicts.size}
                 failed={failures.size}
-                total={bench.length}
+                total={round === 2 ? firstRound.size : bench.length}
                 options={caseFile.options}
                 verdicts={list}
               />
@@ -325,6 +442,10 @@ export default function Home() {
                 tally={tally}
                 verdicts={list}
                 failures={failures}
+                round={round}
+                firstRound={firstRound}
+                heldOver={heldOver}
+                onReconsider={reconsider}
                 onReset={reset}
                 onSelect={setSelected}
               />
@@ -363,6 +484,8 @@ export default function Home() {
         <JurorDossier
           juror={selectedJuror}
           verdict={verdicts.get(selectedJuror.id)}
+          firstVerdict={firstRound.get(selectedJuror.id)}
+          heldOver={heldOver.get(selectedJuror.id)}
           failure={failures.get(selectedJuror.id)}
           caseFile={caseFile}
           instruction={config.instructions[selectedJuror.id]}

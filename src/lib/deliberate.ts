@@ -1,5 +1,5 @@
 import { getJuror } from "./jurors";
-import type { CaseFile, JurorVerdict, Tally, VerdictChoice } from "./types";
+import type { CaseFile, JurorVerdict, RoomPosition, Tally, VerdictChoice } from "./types";
 
 /**
  * STUB ENGINE.
@@ -100,6 +100,71 @@ export function stubVerdict(jurorId: number, caseFile: CaseFile): JurorVerdict {
     pivot: PIVOTS[Math.floor(rand() * PIVOTS.length)],
     deliberationMs: Math.round(1400 + rand() * 5200),
     source: "simulated",
+    round: 1,
+  };
+}
+
+const HELD = [
+  "Nothing said across the table touched the thing this turns on",
+  "I have heard the room and I am where I was",
+  "The arguments against were put well and they were still arguments, not evidence",
+  "I looked again at what they pointed to and it says what I thought it said",
+];
+
+const MOVED = [
+  "Seat by seat they kept returning to a point I had read past",
+  "I had the sequence wrong, and the room was right to say so",
+  "What I took for a gap was answered in the file — I simply had not joined it up",
+  "Put the way it was put to me, my own reasoning stopped holding",
+];
+
+/**
+ * Decide one juror's second-round verdict, offline.
+ *
+ * Deterministic like the first round, and deliberately *sticky*: the room's
+ * count on its own never moves anyone. What moves a juror here is being both
+ * unsure and heavily outnumbered — which is the shape of the thing the real
+ * second round is built to detect, so the stub exercises the same UI states.
+ */
+export function stubReconsideration(
+  jurorId: number,
+  caseFile: CaseFile,
+  own: JurorVerdict,
+  room: RoomPosition[],
+): JurorVerdict {
+  const juror = getJuror(jurorId);
+  if (!juror) throw new Error(`No juror with id ${jurorId}`);
+
+  const rand = rng(hash(`${caseFile.title}::${caseFile.evidence}::${jurorId}::round2`));
+
+  const against = room.filter((p) => p.choice !== own.choice).length;
+  const share = room.length ? against / room.length : 0;
+
+  // Doubt is what opens the door; the size of the crowd only decides how wide.
+  // A juror at 0.95 stays put in front of a unanimous room; one at 0.55 facing
+  // ten the other way is genuinely reconsidering.
+  const pull = Math.max(0, share - 0.5) * (1 - own.confidence) * 2.4;
+  const moved = room.length > 0 && rand() < pull;
+
+  const choice: VerdictChoice = moved ? ((own.choice === 0 ? 1 : 0) as VerdictChoice) : own.choice;
+  // Moving costs conviction; holding through the room's argument earns a little.
+  const confidence = moved
+    ? Math.min(0.9, Math.max(0.5, own.confidence * 0.82 + rand() * 0.06))
+    : Math.min(0.98, own.confidence + (1 - share) * 0.05 + rand() * 0.03);
+
+  const opener = moved
+    ? MOVED[Math.floor(rand() * MOVED.length)]
+    : HELD[Math.floor(rand() * HELD.length)];
+
+  return {
+    jurorId,
+    choice,
+    confidence,
+    rationale: `${opener}. I return ${caseFile.options[choice]}.`,
+    pivot: moved ? PIVOTS[Math.floor(rand() * PIVOTS.length)] : own.pivot,
+    deliberationMs: Math.round(1100 + rand() * 4200),
+    source: "simulated",
+    round: 2,
   };
 }
 

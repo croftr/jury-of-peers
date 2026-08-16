@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { archiveEnabled, deleteCases, listCases, saveCase } from "@/lib/archive";
+import { archiveEnabled, deleteCases, isValidId, listCases, saveCase } from "@/lib/archive";
 import { getJuror } from "@/lib/jurors";
 import type { CaseFile, Juror, JurorFailure, JurorVerdict, VerdictChoice } from "@/lib/types";
 
@@ -21,7 +21,14 @@ interface Body {
   bench: number[];
   instructions?: Record<string, string>;
   verdicts: JurorVerdict[];
+  /** Where the room stood before it went back out, on a case heard twice. */
+  firstRound?: JurorVerdict[];
   failures?: JurorFailure[];
+  /**
+   * An already-filed record this one replaces. Sent when the second round
+   * lands, so a case heard twice is one record rather than two.
+   */
+  supersedes?: string;
 }
 
 const text = (value: unknown, limit: number): string =>
@@ -178,6 +185,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No juror returned a finding." }, { status: 400 });
   }
 
+  // The first round is stored only if it is genuinely a different set of
+  // findings — a client that sends it needlessly shouldn't make the record
+  // claim the room was asked twice.
+  const firstRound = (Array.isArray(body.firstRound) ? body.firstRound : [])
+    .map((v) => cleanVerdict(v, seated))
+    .filter((v): v is JurorVerdict => Boolean(v));
+
   const failures: JurorFailure[] = (Array.isArray(body.failures) ? body.failures : [])
     .filter((f) => f && typeof f === "object" && seated.has(f.jurorId))
     .map((f) => ({ jurorId: f.jurorId, message: text(f.message, 500) }));
@@ -190,17 +204,23 @@ export async function POST(req: Request) {
   }
 
   try {
-    const summary = await saveCase({
-      caseFile: {
-        title: text(raw.title, MAX_TITLE).trim(),
-        evidence: raw.evidence,
-        options: [text(raw.options[0], 80), text(raw.options[1], 80)],
+    const summary = await saveCase(
+      {
+        caseFile: {
+          title: text(raw.title, MAX_TITLE).trim(),
+          evidence: raw.evidence,
+          options: [text(raw.options[0], 80), text(raw.options[1], 80)],
+        },
+        jurors,
+        instructions,
+        verdicts,
+        ...(firstRound.length ? { firstRound } : {}),
+        failures,
       },
-      jurors,
-      instructions,
-      verdicts,
-      failures,
-    });
+      typeof body.supersedes === "string" && isValidId(body.supersedes)
+        ? body.supersedes
+        : undefined,
+    );
     return NextResponse.json({ stored: true, summary });
   } catch (err) {
     console.error("Could not archive the case:", err);

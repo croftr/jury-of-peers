@@ -1,7 +1,8 @@
 # Jury of Peers
 
-Twelve jurors read a case, deliberate independently, and return their findings. Works for
-criminal matters, civil disputes, or settling a debate — any question with two sides.
+Twelve jurors read a case, deliberate independently, and return their findings — then, if you
+send them back out, hear each other and are asked again. Works for criminal matters, civil
+disputes, or settling a debate — any question with two sides.
 
 Each juror is a **different model from a different lab**, reached through OpenRouter — so the
 jury's disagreement is real, not one model arguing with itself.
@@ -56,6 +57,45 @@ continues its actual reasoning rather than reconstructing a position from scratc
 is a fresh call you pay for — a few hundredths of a cent — and never happens as part of a
 verdict run.
 
+## Sending them back out
+
+The first round is silent: twelve jurors decide alone, and nobody hears anybody. **Send them
+back out** under the verdict runs a second round in which each juror is shown what every
+other juror found, at what confidence, on what sticking point, and in their own words — then
+asked once more.
+
+This is the part worth watching. The verdict panel reports who moved and which way, and the
+split before and after (*"Three jurors moved — 8–4 became 11–1"*). A juror who moved carries a
+mark in the strip of pips, and their dossier keeps both findings side by side with the
+rationale they gave the first time.
+
+The prompt works hard against mere agreement, because the naive version of this produces
+nothing else — told only that eleven jurors disagree, models fold. So the charge says in
+terms that **a count is not evidence**: change your finding only if a juror named a fact you
+overlooked, a reading you had not considered, or an error in your own reasoning; otherwise
+hold, and name the thing you are holding against. A juror may also keep their finding and
+move their confidence, which is why the panel reports a room that held but grew more or less
+sure of itself.
+
+A few things follow from how it is wired:
+
+- **The room hears arguments, not models.** Only the finding, confidence, sticking point and
+  rationale travel between jurors. Which model held a view — and what it cost — never does.
+- **Each juror's own first answer is replayed as their previous turn**, so a model that
+  changes its mind is revising a position it actually held rather than scoring a fresh case
+  that arrives with opinions attached.
+- **Nobody argues with themselves.** A juror's own seat is excluded from the room put to them.
+- **A second round can never lose a vote.** A juror whose model fails on the second asking
+  keeps their first finding and stays in the count, flagged in their dossier.
+- **One extra call per juror**, at roughly what the first round cost — a little more, since
+  the room travels in the prompt. The button says so before you press it, and the panel then
+  reports the total for both rounds.
+- Cases heard twice are **one record in the archive**, not two: the second round supersedes
+  the first under the same id, keeping the first-round findings alongside the final ones.
+
+Jurors who never returned a finding do not go back out, and a bench of one is never offered
+the button — there is no room to reconsider in front of.
+
 ## Choosing a jury
 
 `/jury` lists all twelve. Excuse anyone you don't want on the case (at least one must
@@ -84,9 +124,10 @@ support — verify a replacement the same way before swapping one in.
 | `src/lib/juryConfig.ts` | Who is empanelled and their standing instructions (localStorage) |
 | `src/app/jury/page.tsx` | The empanelment screen |
 | `src/app/jury/[slug]/page.tsx` | One juror's own page |
-| `src/lib/openrouter.ts` | **The juror call** — prompt, JSON schema, lenient parsing |
-| `src/lib/deliberate.ts` | The offline stub engine (`stubVerdict`) and the aggregation (`tally`) |
+| `src/lib/openrouter.ts` | **The juror call** — prompt, JSON schema, lenient parsing; and `requestReconsideration`, the second round |
+| `src/lib/deliberate.ts` | The offline stub engine (`stubVerdict`, `stubReconsideration`) and the aggregation (`tally`) |
 | `src/app/api/verdict/route.ts` | One juror, one request — the client fans out twelve in parallel |
+| `src/app/api/reconsider/route.ts` | The same, for the second round — one juror, having heard the room |
 | `src/app/api/explain/route.ts` | Follow-up questions to a juror who already decided |
 | `src/components/JurorAvatar.tsx` | Procedural SVG portraits assembled from parts |
 | `src/components/JuryBox.tsx` | The two arcs of seats with the well of the court between them |
@@ -128,3 +169,8 @@ retries, and per-juror model selection belong.
 `tally()` returns the majority finding, whether it was unanimous, the split, and the mean
 confidence of the jurors in the majority. A dead-even 6–6 room is reported as deadlocked;
 anything else returns a majority, labelled decisive at 10+ and divided below that.
+
+After a second round the same function is run twice — once over the first-round findings and
+once over the final ones — and everything the panel says about movement is the difference
+between them. Nothing about who moved is stored, so it cannot drift from the findings on
+screen.
