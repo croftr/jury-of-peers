@@ -436,6 +436,9 @@ export default function Home() {
         <div className="rule mt-4" />
       </header>
 
+      {/* Both links above the box are about the jurors: who is empanelled, and
+          how they have actually behaved. The archive sits over the case,
+          because a case is what it is a record of. */}
       <div ref={boxRef} className="scroll-mt-4">
         <JuryBox
           jurors={bench}
@@ -445,34 +448,34 @@ export default function Home() {
           options={caseFile.options}
           onSelect={setSelected}
           controls={
-            <Link
-              href="/jury"
-              className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
-                         transition-colors underline underline-offset-4 decoration-dotted"
-            >
-              The jury ({bench.length}/{JURORS.length})
-            </Link>
-          }
-          wellControls={
             <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
               <Link
-                href="/archive"
-                className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                href="/jury"
+                className="mono text-[12px] tracking-[0.22em] uppercase text-brass/70 hover:text-brass-lit
                            transition-colors underline underline-offset-4 decoration-dotted"
               >
-                Past cases
+                The jury ({bench.length}/{JURORS.length})
               </Link>
               <span aria-hidden className="mono text-[12px] text-muted/30">
                 ·
               </span>
               <Link
                 href="/record"
-                className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                className="mono text-[12px] tracking-[0.22em] uppercase text-brass/70 hover:text-brass-lit
                            transition-colors underline underline-offset-4 decoration-dotted"
               >
-                The record
+                Their record
               </Link>
             </span>
+          }
+          wellControls={
+            <Link
+              href="/archive"
+              className="mono text-[12px] tracking-[0.26em] uppercase text-brass/70 hover:text-brass-lit
+                         transition-colors underline underline-offset-4 decoration-dotted"
+            >
+              Past cases
+            </Link>
           }
         >
           {phase === "idle" && (
