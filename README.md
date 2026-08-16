@@ -25,7 +25,9 @@ models, so the whole UI is exercisable offline. A badge under the title says whi
 have.
 
 A typical case (~800 words of evidence) costs around **half a cent per verdict** across all
-twelve jurors. The exact figure for each run is shown under the verdict, and each juror's own
+twelve jurors. Longer cases cost proportionally more — a hundred-thousand-token file is
+nearer twenty cents a round — so the case form estimates the run before you commit to it.
+The exact figure is shown under the verdict once the tokens are real, and each juror's own
 token count and cost is in their dossier.
 
 ## The jury
@@ -56,6 +58,49 @@ mind?"*). Their original verdict is replayed to the model as its own previous tu
 continues its actual reasoning rather than reconstructing a position from scratch. Each ask
 is a fresh call you pay for — a few hundredths of a cent — and never happens as part of a
 verdict run.
+
+## How long a case can be
+
+The twelve context windows differ by two orders of magnitude — Phi-4 holds 16k tokens where
+Gemini holds a million — so "how long can the evidence be" has twelve different answers. The
+case form works them out for the case actually in front of it and says, before the jury goes
+out, which jurors cannot read a file this long and roughly what the round will cost.
+
+A juror whose model cannot hold the case is **refused rather than sent**: an over-long prompt
+is a 400 from the provider, so sending it costs money to be told nothing and reads as an
+upstream error rather than the plain fact that the model is too small. Their seat shows empty
+with the reason in their dossier, and the verdict rests on the jurors who could read it. The
+rehearsal engine honours the same limits, so an offline run is a faithful rehearsal.
+
+The second round is checked separately: it carries the whole room on top of the case, so a
+juror who could read the file alone may not be able to read it with everyone else's argument
+attached.
+
+Estimates come from `src/lib/estimate.ts`, which counts tokens roughly — about four
+characters to the token, with a safety margin — rather than pretending to twelve different
+tokenisers. It errs high, because guessing low is the expensive direction.
+
+A case can also be too large to *file*, which is a separate limit: `MAX_EVIDENCE_BYTES`,
+derived from the archive's per-record ceiling with room for two rounds of verdicts, and
+measured in bytes rather than characters. That one is only a warning — the jury still hears
+the case, it just is not remembered.
+
+## Spending, and stopping
+
+Two brakes, neither of them a security control — the password on the door is that:
+
+- **Calling them back.** While the jury is out, every seat still thinking is a call still
+  running and still being billed. **Call them back** under the deliberation aborts them: the
+  client hangs up, and the request's signal is threaded into the OpenRouter call, so the
+  upstream request stops rather than running to completion for an answer nobody will see.
+  Closing the tab does the same.
+- **A rate limit.** `src/lib/rateLimit.ts` caps model calls at 90 per five minutes per
+  caller, and uploads at 40. A full twelve-juror round is twelve calls and a case heard twice
+  is twenty-four, so this leaves room for real use and stops a runaway loop dead. In memory,
+  so it resets with the server — the right trade for a personal tool.
+
+Retries wait a jittered half-second to a second and a half before the single retry, because
+an immediate retry of a 429 is just a second 429.
 
 ## Sending them back out
 
@@ -124,6 +169,8 @@ support — verify a replacement the same way before swapping one in.
 | `src/lib/juryConfig.ts` | Who is empanelled and their standing instructions (localStorage) |
 | `src/app/jury/page.tsx` | The empanelment screen |
 | `src/app/jury/[slug]/page.tsx` | One juror's own page |
+| `src/lib/estimate.ts` | Token counts, who can read a case, what a round will cost |
+| `src/lib/rateLimit.ts` | The brake on how fast the app can be made to spend |
 | `src/lib/openrouter.ts` | **The juror call** — prompt, JSON schema, lenient parsing; and `requestReconsideration`, the second round |
 | `src/lib/deliberate.ts` | The offline stub engine (`stubVerdict`, `stubReconsideration`) and the aggregation (`tally`) |
 | `src/app/api/verdict/route.ts` | One juror, one request — the client fans out twelve in parallel |

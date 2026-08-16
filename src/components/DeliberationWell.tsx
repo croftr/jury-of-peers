@@ -38,6 +38,7 @@ export default function DeliberationWell({
   total,
   options,
   verdicts,
+  onRecall,
 }: {
   active: boolean;
   /** 1 is the silent round; 2 is after the room has been polled. */
@@ -47,6 +48,8 @@ export default function DeliberationWell({
   total: number;
   options: [string, string];
   verdicts: JurorVerdict[];
+  /** Hangs up on every juror still out, so an unwanted run stops costing money. */
+  onRecall?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
   const [murmur, setMurmur] = useState(0);
@@ -121,6 +124,21 @@ export default function DeliberationWell({
         <p key={murmur} className="relative mt-4 text-center text-base text-muted italic a-rise display">
           {murmurs[murmur % murmurs.length]}
         </p>
+
+        {/* The jurors still out are calls still running and still being billed.
+            Sending the wrong case out should cost what has landed, not all of it. */}
+        {onRecall && returned + failed < total && (
+          <div className="relative mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={onRecall}
+              className="mono text-[10px] tracking-[0.22em] uppercase text-muted/60 hover:text-for
+                         transition-colors underline underline-offset-4 decoration-dotted"
+            >
+              Call them back
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

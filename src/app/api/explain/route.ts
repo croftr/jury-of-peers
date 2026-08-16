@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getJuror } from "@/lib/jurors";
 import { costOf } from "@/lib/models";
-import { DEFAULT_QUESTION, JurorError, hasApiKey, requestExplanation } from "@/lib/openrouter";
+import {
+  CancelledError,
+  DEFAULT_QUESTION,
+  JurorError,
+  hasApiKey,
+  requestExplanation,
+} from "@/lib/openrouter";
+import { MODEL_CALLS, limited } from "@/lib/rateLimit";
 import type { CaseFile, JurorExplanation, JurorVerdict } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -26,6 +33,9 @@ const MAX_QUESTION = 500;
  * pays for by asking — the verdict run never triggers it.
  */
 export async function POST(req: Request) {
+  const brake = limited(req, MODEL_CALLS);
+  if (brake) return brake;
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -77,6 +87,7 @@ export async function POST(req: Request) {
       bench,
       instruction,
       question,
+      req.signal,
     );
     const explanation: JurorExplanation = {
       jurorId,
@@ -90,6 +101,9 @@ export async function POST(req: Request) {
     };
     return NextResponse.json(explanation);
   } catch (err) {
+    if (err instanceof CancelledError) {
+      return NextResponse.json({ error: err.message }, { status: 499 });
+    }
     const message =
       err instanceof JurorError ? err.message : "This juror could not be reached.";
     console.error(`Seat ${juror.seat} (${juror.alias}) could not explain:`, err);

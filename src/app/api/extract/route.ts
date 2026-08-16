@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { UPLOADS, limited } from "@/lib/rateLimit";
 
 // PDF.js and mammoth both want a real Node runtime, and both are lazily
 // imported below so an upload of a plain .txt never pays for either.
@@ -46,6 +47,9 @@ function tidy(raw: string): string {
  * the case file like anything that was typed in by hand.
  */
 export async function POST(req: Request) {
+  const brake = limited(req, UPLOADS);
+  if (brake) return brake;
+
   let form: FormData;
   try {
     form = await req.formData();

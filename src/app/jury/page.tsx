@@ -3,14 +3,10 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import JurorAvatar from "@/components/JurorAvatar";
+import { nominalCost } from "@/lib/estimate";
 import { JURORS, slugFor } from "@/lib/jurors";
 import { MAX_INSTRUCTION, useJuryConfig } from "@/lib/juryConfig";
-import { modelFor, type JurorModel } from "@/lib/models";
-
-/** What one case costs this juror, on a case the size of the sample. */
-function costPerCase(model: JurorModel): number {
-  return (1200 * model.inPerM + 350 * model.outPerM) / 1_000_000;
-}
+import { modelFor } from "@/lib/models";
 
 type SortKey = "seat" | "cost" | "context";
 type Direction = "asc" | "desc";
@@ -42,7 +38,7 @@ export default function JuryPage() {
       const m = modelFor(id);
       switch (sort) {
         case "cost":
-          return m ? costPerCase(m) : 0;
+          return m ? nominalCost(m) : 0;
         case "context":
           return m?.context ?? 0;
         default:
@@ -61,11 +57,11 @@ export default function JuryPage() {
     }
   };
 
-  // Estimated cost of one case across the seated bench, on a ~1,200-token case
-  // and ~350 tokens of reasoning each — the same shape as the sample.
+  // Estimated cost of one round across the seated bench, on a case the size of
+  // the sample. The court itself estimates from the case actually in the file.
   const estimate = JURORS.filter((j) => config.seated.includes(j.id)).reduce((sum, j) => {
     const m = modelFor(j.id);
-    return m ? sum + (1200 * m.inPerM + 350 * m.outPerM) / 1_000_000 : sum;
+    return m ? sum + nominalCost(m) : sum;
   }, 0);
 
   // The smallest context window on the bench caps how large a case file can be.
@@ -241,7 +237,7 @@ export default function JuryPage() {
                     className="text-muted/60"
                     title={`$${model.inPerM} in · $${model.outPerM} out, per million tokens`}
                   >
-                    ≈ ${costPerCase(model).toFixed(5)} / case
+                    ≈ ${nominalCost(model).toFixed(5)} / case
                   </span>
                 </div>
               )}

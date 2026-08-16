@@ -63,6 +63,23 @@ export default function Home() {
   const boxRef = useRef<HTMLDivElement>(null);
   /** The archive id of this case, so a second round replaces it rather than filing twice. */
   const filedId = useRef<string | null>(null);
+  /**
+   * Hangs up on every juror still out. Bumping `runId` only makes the court stop
+   * *listening*; without this the calls run to completion and are billed for
+   * findings that will never be shown.
+   */
+  const inFlight = useRef<AbortController | null>(null);
+
+  /** End the current run, for real. Returns the controller the next one should use. */
+  const recall = useCallback(() => {
+    inFlight.current?.abort();
+    const next = new AbortController();
+    inFlight.current = next;
+    return next;
+  }, []);
+
+  // A tab closed mid-deliberation should not leave twelve calls running.
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   const bench = useMemo(() => seatedJurors(config), [config]);
   const list = useMemo(() => [...verdicts.values()], [verdicts]);
@@ -124,6 +141,7 @@ export default function Home() {
     }
 
     const run = ++runId.current;
+    const { signal } = recall();
     setError(null);
     setVerdicts(new Map());
     setFailures(new Map());
@@ -145,6 +163,7 @@ export default function Home() {
           const res = await fetch("/api/verdict", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal,
             body: JSON.stringify({
               jurorId: juror.id,
               caseFile,
@@ -161,7 +180,9 @@ export default function Home() {
           return verdict;
         } catch (err) {
           const message = err instanceof Error ? err.message : "This juror could not be reached.";
-          if (runId.current === run) {
+          // We called them back; they did not fail. Nothing to report, and this
+          // run is already abandoned.
+          if (runId.current === run && !signal.aborted) {
             setFailures((prev) => new Map(prev).set(juror.id, message));
           }
           return { jurorId: juror.id, message };
@@ -192,7 +213,7 @@ export default function Home() {
     setTimeout(() => {
       if (runId.current === run) setPhase("verdict");
     }, 900);
-  }, [caseFile, bench, config.instructions, file]);
+  }, [caseFile, bench, config.instructions, file, recall]);
 
   /**
    * Send the room back out.
@@ -209,6 +230,7 @@ export default function Home() {
     if (first.length < 2 || phase !== "verdict") return;
 
     const run = ++runId.current;
+    const { signal } = recall();
     setFirstRound(new Map(verdicts));
     setRound(2);
     setVerdicts(new Map());
@@ -236,6 +258,7 @@ export default function Home() {
           const res = await fetch("/api/reconsider", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal,
             body: JSON.stringify({
               jurorId: own.jurorId,
               caseFile,
@@ -255,7 +278,7 @@ export default function Home() {
           return revised;
         } catch (err) {
           const message = err instanceof Error ? err.message : "This juror could not be reached.";
-          if (runId.current === run) {
+          if (runId.current === run && !signal.aborted) {
             setVerdicts((prev) => new Map(prev).set(own.jurorId, own));
             setHeldOver((prev) => new Map(prev).set(own.jurorId, message));
           }
@@ -272,10 +295,12 @@ export default function Home() {
     setTimeout(() => {
       if (runId.current === run) setPhase("verdict");
     }, 900);
-  }, [verdicts, phase, caseFile, bench, config.instructions, failures, file]);
+  }, [verdicts, phase, caseFile, bench, config.instructions, failures, file, recall]);
 
   const reset = useCallback(() => {
     runId.current++;
+    inFlight.current?.abort();
+    inFlight.current = null;
     setVerdicts(new Map());
     setFailures(new Map());
     setFirstRound(new Map());
@@ -412,6 +437,9 @@ export default function Home() {
                 onSubmit={charge}
                 busy={false}
                 benchCount={bench.length}
+                bench={bench}
+                instructions={config.instructions}
+                live={live}
               />
               {error && <p className="mt-4 text-center text-base text-for">{error}</p>}
             </div>
@@ -430,6 +458,7 @@ export default function Home() {
                 total={round === 2 ? firstRound.size : bench.length}
                 options={caseFile.options}
                 verdicts={list}
+                onRecall={reset}
               />
             </div>
           )}

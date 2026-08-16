@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { CaseFile } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MAX_EVIDENCE_BYTES, cannotRead, estimateCost, estimateTokens } from "@/lib/estimate";
+import type { CaseFile, Juror } from "@/lib/types";
 
 /** What the extractor on /api/extract knows how to read. */
 const ACCEPT = ".txt,.text,.md,.markdown,.csv,.tsv,.json,.log,.rtf,.pdf,.docx,text/plain";
@@ -87,12 +88,20 @@ export default function CaseForm({
   onSubmit,
   busy,
   benchCount,
+  bench = [],
+  instructions = {},
+  live,
 }: {
   caseFile: CaseFile;
   onChange: (c: CaseFile) => void;
   onSubmit: () => void;
   busy: boolean;
   benchCount?: number;
+  /** The seated jury, for working out who can read this case and what it will cost. */
+  bench?: Juror[];
+  instructions?: Record<number, string>;
+  /** Whether real models are wired up — a simulated jury costs nothing to warn about. */
+  live?: boolean | null;
 }) {
   const [step, setStep] = useState<Step>(0);
   const [preset, setPreset] = useState("criminal");
@@ -115,6 +124,25 @@ export default function CaseForm({
   const words = caseFile.evidence.trim() ? caseFile.evidence.trim().split(/\s+/).length : 0;
   const noJurors = benchCount === 0;
   const ready = words > 0 && !busy && !noJurors;
+
+  /*
+   * What this case will cost and who cannot read it, worked out before anyone
+   * commits to it. Twelve context windows differ by two orders of magnitude —
+   * Phi-4 holds sixteen thousand tokens where Gemini holds a million — so a long
+   * upload silently costs several seats unless the court says so first.
+   */
+  const preflight = useMemo(() => {
+    if (!words || !bench.length) return null;
+    const excused = cannotRead(bench, caseFile, instructions);
+    const tokens = estimateTokens(caseFile.evidence);
+    return {
+      excused,
+      tokens,
+      cost: estimateCost(bench, caseFile, instructions),
+      // Bytes, not characters: the archive's ceiling is a byte ceiling.
+      tooBigToArchive: new Blob([caseFile.evidence]).size > MAX_EVIDENCE_BYTES,
+    };
+  }, [caseFile, bench, instructions, words]);
 
   const open = (to: Step = 1) => setStep(to);
   const back = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
@@ -453,6 +481,48 @@ export default function CaseForm({
               </div>
             )}
           </div>
+
+          {/* ── What this run will cost, and who cannot sit on it ──────── */}
+          {step === 3 && preflight && (preflight.excused.length > 0 || preflight.tooBigToArchive || live) && (
+            <div className="mt-5 space-y-2">
+              {preflight.excused.length > 0 && (
+                <div className="rounded-lg border border-brass/30 bg-brass/5 px-4 py-3">
+                  <p className="mono text-[10px] tracking-[0.2em] uppercase text-brass mb-1.5">
+                    {preflight.excused.length === 1
+                      ? "One juror cannot read a file this long"
+                      : `${preflight.excused.length} jurors cannot read a file this long`}
+                  </p>
+                  <p className="text-[13px] text-bone/75 leading-relaxed">
+                    {preflight.excused
+                      .map((e) => `${e.juror.alias} (${e.model.label}, ${
+                        e.context >= 1000 ? `${Math.round(e.context / 1000)}k` : e.context
+                      })`)
+                      .join(", ")}
+                    .{" "}
+                    {preflight.excused.length === 1
+                      ? "Their seat will be empty"
+                      : "Their seats will be empty"}{" "}
+                    and the verdict will rest on the rest of the room — shorten the evidence, or
+                    excuse them on the jury page.
+                  </p>
+                </div>
+              )}
+
+              {preflight.tooBigToArchive && (
+                <p className="text-[13px] text-muted leading-relaxed">
+                  This case is too large to file in the archive. The jury will still hear it and
+                  return a verdict; it just will not be remembered.
+                </p>
+              )}
+
+              {live && !!preflight.cost && (
+                <p className="mono text-[10px] tracking-[0.16em] uppercase text-muted/70 tabular-nums">
+                  ≈ {preflight.tokens.toLocaleString()} tokens · about $
+                  {preflight.cost.toFixed(preflight.cost < 0.01 ? 4 : 3)} for this round
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ── Back, and the way forward ─────────────────────────────── */}
           <div className="mt-6 pt-5 border-t border-white/8 flex items-center justify-between gap-4">

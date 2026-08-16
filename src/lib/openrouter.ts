@@ -1,4 +1,5 @@
-import { costOf, modelFor } from "./models";
+import { estimateTokens, readabilityError, roomTokens } from "./estimate";
+import { costOf, modelFor, type JurorModel } from "./models";
 import type { CaseFile, Juror, JurorVerdict, RoomPosition, VerdictChoice } from "./types";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -15,8 +16,63 @@ export class JurorError extends Error {
   }
 }
 
+/** Raised when the court gave up on this juror, rather than the juror failing. */
+export class CancelledError extends Error {
+  constructor() {
+    super("This juror was called back before they answered.");
+  }
+}
+
+/**
+ * When to stop waiting: the juror's own ceiling, or the caller walking away.
+ *
+ * Threading the request's signal through is what makes "start over" cost
+ * nothing. Without it the browser hangs up, the route keeps waiting, and the
+ * call is billed in full for an answer nobody will ever see.
+ */
+function deadline(abort?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  return abort ? AbortSignal.any([abort, timeout]) : timeout;
+}
+
+/** Distinguish "we hung up" from "the model failed", which read very differently. */
+function classify(err: unknown, model: JurorModel, abort?: AbortSignal): never {
+  if (abort?.aborted) throw new CancelledError();
+  const reason =
+    err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
+  throw new JurorError(`${model.label} ${reason}.`, true);
+}
+
+/**
+ * Wait a moment before trying again.
+ *
+ * An immediate retry of a 429 is a second 429 — the thing that rate-limited us
+ * has not changed its mind in nought milliseconds. Jittered so twelve jurors
+ * failing together do not all come back at the same instant.
+ */
+function pause(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1000));
+}
+
 export function hasApiKey(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY?.trim());
+}
+
+/**
+ * Refuse a case that cannot fit this juror's context, before spending on it.
+ *
+ * Checked here rather than in the route so both rounds and the follow-up
+ * question get it for free. The wording lives in `estimate.ts`, which is also
+ * what the case form warns with, so the court and the call cannot disagree.
+ */
+function assertReadable(
+  juror: Juror,
+  caseFile: CaseFile,
+  instruction?: string,
+  extraTokens = 0,
+): void {
+  const reason = readabilityError(juror, caseFile, instruction, extraTokens);
+  if (reason) throw new JurorError(reason);
 }
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
@@ -104,12 +160,15 @@ export async function requestVerdict(
   caseFile: CaseFile,
   bench: number,
   instruction?: string,
+  abort?: AbortSignal,
 ): Promise<JurorVerdict> {
   try {
-    return await attemptVerdict(juror, caseFile, bench, instruction);
+    return await attemptVerdict(juror, caseFile, bench, instruction, abort);
   } catch (err) {
     if (err instanceof JurorError && err.retryable) {
-      return attemptVerdict(juror, caseFile, bench, instruction);
+      await pause();
+      if (abort?.aborted) throw new CancelledError();
+      return attemptVerdict(juror, caseFile, bench, instruction, abort);
     }
     throw err;
   }
@@ -120,6 +179,7 @@ async function attemptVerdict(
   caseFile: CaseFile,
   bench: number,
   instruction?: string,
+  abort?: AbortSignal,
 ): Promise<JurorVerdict> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new JurorError("OPENROUTER_API_KEY is not set.");
@@ -127,13 +187,15 @@ async function attemptVerdict(
   const model = modelFor(juror.id);
   if (!model) throw new JurorError(`No model assigned to seat ${juror.seat}.`);
 
+  assertReadable(juror, caseFile, instruction);
+
   const startedAt = Date.now();
 
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
       method: "POST",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: deadline(abort),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -162,8 +224,7 @@ async function attemptVerdict(
       }),
     });
   } catch (err) {
-    const reason = err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
-    throw new JurorError(`${model.label} ${reason}.`, true);
+    classify(err, model, abort);
   }
 
   if (!res.ok) {
@@ -295,12 +356,15 @@ export async function requestReconsideration(
   room: { juror: Juror; position: RoomPosition }[],
   bench: number,
   instruction?: string,
+  abort?: AbortSignal,
 ): Promise<JurorVerdict> {
   try {
-    return await attemptReconsideration(juror, caseFile, own, room, bench, instruction);
+    return await attemptReconsideration(juror, caseFile, own, room, bench, instruction, abort);
   } catch (err) {
     if (err instanceof JurorError && err.retryable) {
-      return attemptReconsideration(juror, caseFile, own, room, bench, instruction);
+      await pause();
+      if (abort?.aborted) throw new CancelledError();
+      return attemptReconsideration(juror, caseFile, own, room, bench, instruction, abort);
     }
     throw err;
   }
@@ -313,6 +377,7 @@ async function attemptReconsideration(
   room: { juror: Juror; position: RoomPosition }[],
   bench: number,
   instruction?: string,
+  abort?: AbortSignal,
 ): Promise<JurorVerdict> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new JurorError("OPENROUTER_API_KEY is not set.");
@@ -320,13 +385,18 @@ async function attemptReconsideration(
   const model = modelFor(juror.id);
   if (!model) throw new JurorError(`No model assigned to seat ${juror.seat}.`);
 
+  // The second round carries the whole room on top of the case, so a juror who
+  // could read the file alone may still not be able to read it with everyone
+  // else's argument attached.
+  assertReadable(juror, caseFile, instruction, roomTokens(room.map((r) => r.position)));
+
   const startedAt = Date.now();
 
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
       method: "POST",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: deadline(abort),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -352,8 +422,7 @@ async function attemptReconsideration(
       }),
     });
   } catch (err) {
-    const reason = err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
-    throw new JurorError(`${model.label} ${reason}.`, true);
+    classify(err, model, abort);
   }
 
   if (!res.ok) {
@@ -423,6 +492,7 @@ export async function requestExplanation(
   bench: number,
   instruction?: string,
   question?: string,
+  abort?: AbortSignal,
 ): Promise<{ text: string; usage: { promptTokens: number; completionTokens: number } }> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new JurorError("OPENROUTER_API_KEY is not set.");
@@ -432,11 +502,20 @@ export async function requestExplanation(
 
   const asked = question?.trim() || DEFAULT_QUESTION;
 
+  // Their first answer and the question go on top of the case, so this is the
+  // longer prompt of the two even though the reply is shorter.
+  assertReadable(
+    juror,
+    caseFile,
+    instruction,
+    estimateTokens(verdict.rationale) + estimateTokens(asked) + 120,
+  );
+
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
       method: "POST",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: deadline(abort),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -450,15 +529,7 @@ export async function requestExplanation(
           { role: "system", content: systemPrompt(juror, caseFile, bench, instruction) },
           { role: "user", content: userPrompt(caseFile) },
           // Their own answer, replayed so the follow-up continues it.
-          {
-            role: "assistant",
-            content: JSON.stringify({
-              finding: caseFile.options[verdict.choice],
-              confidence: Number(verdict.confidence.toFixed(2)),
-              rationale: verdict.rationale,
-              sticking_point: verdict.pivot,
-            }),
-          },
+          ownTurn(caseFile, verdict),
           {
             role: "user",
             content: `${asked}
@@ -474,8 +545,7 @@ Answer as this juror, in plain prose — no JSON, no headings, no bullet points.
       }),
     });
   } catch (err) {
-    const reason = err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
-    throw new JurorError(`${model.label} ${reason}.`, true);
+    classify(err, model, abort);
   }
 
   if (!res.ok) {

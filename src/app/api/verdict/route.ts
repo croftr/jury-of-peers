@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { stubVerdict } from "@/lib/deliberate";
+import { readabilityError } from "@/lib/estimate";
 import { getJuror } from "@/lib/jurors";
-import { JurorError, hasApiKey, requestVerdict } from "@/lib/openrouter";
+import { CancelledError, JurorError, hasApiKey, requestVerdict } from "@/lib/openrouter";
+import { MODEL_CALLS, limited } from "@/lib/rateLimit";
 import type { CaseFile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -28,6 +30,9 @@ const MAX_INSTRUCTION = 1200;
  * UI is fully exercisable offline.
  */
 export async function POST(req: Request) {
+  const brake = limited(req, MODEL_CALLS);
+  if (brake) return brake;
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -50,13 +55,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Both findings need a label." }, { status: 400 });
   }
 
-  if (!hasApiKey()) {
-    const verdict = stubVerdict(jurorId, caseFile);
-    // Stand in for model latency so the deliberation still staggers.
-    await new Promise((r) => setTimeout(r, verdict.deliberationMs));
-    return NextResponse.json(verdict);
-  }
-
   const bench =
     Number.isInteger(body.bench) && body.bench! >= 1 && body.bench! <= 12 ? body.bench! : 12;
   const instruction =
@@ -64,9 +62,31 @@ export async function POST(req: Request) {
       ? body.instruction.trim().slice(0, MAX_INSTRUCTION)
       : undefined;
 
+  // Checked before the rehearsal branch as well as the live one: a juror whose
+  // model could not hold this case should not quietly return a finding just
+  // because no key is set. Rehearsal is meant to be a faithful rehearsal.
+  const unreadable = readabilityError(juror, caseFile, instruction);
+  if (unreadable) {
+    return NextResponse.json({ error: unreadable }, { status: 413 });
+  }
+
+  if (!hasApiKey()) {
+    const verdict = stubVerdict(jurorId, caseFile);
+    // Stand in for model latency so the deliberation still staggers.
+    await new Promise((r) => setTimeout(r, verdict.deliberationMs));
+    return NextResponse.json(verdict);
+  }
+
   try {
-    return NextResponse.json(await requestVerdict(juror, caseFile, bench, instruction));
+    return NextResponse.json(
+      await requestVerdict(juror, caseFile, bench, instruction, req.signal),
+    );
   } catch (err) {
+    // The court hung up. Nobody is waiting for this and nothing went wrong, so
+    // it is not worth a line in the log.
+    if (err instanceof CancelledError) {
+      return NextResponse.json({ error: err.message }, { status: 499 });
+    }
     const message =
       err instanceof JurorError ? err.message : "This juror could not be reached.";
     console.error(`Seat ${juror.seat} (${juror.alias}) failed:`, err);

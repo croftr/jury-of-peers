@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { stubReconsideration } from "@/lib/deliberate";
+import { readabilityError, roomTokens } from "@/lib/estimate";
 import { getJuror } from "@/lib/jurors";
-import { JurorError, hasApiKey, requestReconsideration } from "@/lib/openrouter";
+import {
+  CancelledError,
+  JurorError,
+  hasApiKey,
+  requestReconsideration,
+} from "@/lib/openrouter";
+import { MODEL_CALLS, limited } from "@/lib/rateLimit";
 import type { CaseFile, Juror, JurorVerdict, RoomPosition } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -70,6 +77,9 @@ function cleanPosition(raw: unknown, self: number): { juror: Juror; position: Ro
  * finding rather than losing the vote.
  */
 export async function POST(req: Request) {
+  const brake = limited(req, MODEL_CALLS);
+  if (brake) return brake;
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -111,6 +121,25 @@ export async function POST(req: Request) {
     );
   }
 
+  const bench =
+    Number.isInteger(body.bench) && body.bench! >= 1 && body.bench! <= 12 ? body.bench! : 12;
+  const instruction =
+    typeof body.instruction === "string"
+      ? body.instruction.trim().slice(0, MAX_INSTRUCTION)
+      : undefined;
+
+  // The room rides on top of the case here, so a juror who could read the file
+  // in the first round may not be able to read it in the second.
+  const unreadable = readabilityError(
+    juror,
+    caseFile,
+    instruction,
+    roomTokens(room.map((r) => r.position)),
+  );
+  if (unreadable) {
+    return NextResponse.json({ error: unreadable }, { status: 413 });
+  }
+
   if (!hasApiKey()) {
     const verdict = stubReconsideration(
       jurorId,
@@ -122,18 +151,14 @@ export async function POST(req: Request) {
     return NextResponse.json(verdict);
   }
 
-  const bench =
-    Number.isInteger(body.bench) && body.bench! >= 1 && body.bench! <= 12 ? body.bench! : 12;
-  const instruction =
-    typeof body.instruction === "string"
-      ? body.instruction.trim().slice(0, MAX_INSTRUCTION)
-      : undefined;
-
   try {
     return NextResponse.json(
-      await requestReconsideration(juror, caseFile, own, room, bench, instruction),
+      await requestReconsideration(juror, caseFile, own, room, bench, instruction, req.signal),
     );
   } catch (err) {
+    if (err instanceof CancelledError) {
+      return NextResponse.json({ error: err.message }, { status: 499 });
+    }
     const message =
       err instanceof JurorError ? err.message : "This juror could not be reached.";
     console.error(`Seat ${juror.seat} (${juror.alias}) failed to reconsider:`, err);

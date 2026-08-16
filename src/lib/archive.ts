@@ -7,6 +7,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { tally as computeTally } from "./deliberate";
+import { MAX_RECORD_BYTES } from "./estimate";
 import type { ArchivedCase, CaseSummary, Juror, JurorFailure, JurorVerdict } from "./types";
 
 /**
@@ -30,8 +31,11 @@ const ENDPOINT = process.env.CASES_BUCKET_ENDPOINT?.trim();
 /** Beyond this the list page stops being a list. Older cases stay retrievable by id. */
 const LIST_LIMIT = 250;
 
-/** A whole case in one object — generous for evidence, mean to anyone pasting a novel. */
-export const MAX_RECORD_BYTES = 1_000_000;
+/*
+ * The record ceiling and the evidence limit derived from it live in `estimate.ts`
+ * — generous for evidence, mean to anyone pasting a novel — so the case form can
+ * warn about the limit without importing the S3 client to find out what it is.
+ */
 
 let client: S3Client | null = null;
 

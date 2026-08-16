@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { archiveEnabled, deleteCases, isValidId, listCases, saveCase } from "@/lib/archive";
+import { MAX_EVIDENCE_BYTES } from "@/lib/estimate";
 import { getJuror } from "@/lib/jurors";
 import type { CaseFile, Juror, JurorFailure, JurorVerdict, VerdictChoice } from "@/lib/types";
 
@@ -12,8 +13,6 @@ export const dynamic = "force-dynamic";
 const MAX_INSTRUCTION = 1200;
 const MAX_TITLE = 200;
 const MAX_TEXT = 4000;
-/** Leaves comfortable room under the archive's per-record ceiling. */
-const MAX_EVIDENCE = 400_000;
 
 interface Body {
   caseFile: CaseFile;
@@ -149,8 +148,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "A case needs its evidence." }, { status: 400 });
   }
   // Evidence is stored whole — truncating someone's case would quietly change
-  // what the jury was shown — so an oversized one is refused outright.
-  if (raw.evidence.length > MAX_EVIDENCE) {
+  // what the jury was shown — so an oversized one is refused outright. Measured
+  // in bytes, because that is what the record ceiling is measured in: checking
+  // characters passes text that then fails the write, and by then the verdict
+  // has already been paid for.
+  if (Buffer.byteLength(raw.evidence, "utf8") > MAX_EVIDENCE_BYTES) {
     return NextResponse.json(
       { error: "This case is too large to archive." },
       { status: 413 },
