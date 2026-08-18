@@ -36,7 +36,14 @@
 body {
   background:
     radial-gradient(120% 90% at 50% -20%, rgba(201, 162, 39, 0.13), transparent 60%),
-    radial-gradient(80% 60% at 50% 110%, rgba(55, 183, 156, 0.07), transparent 65%),
+    /*
+     * The floor the room stands on. Sized in rem rather than as a share of the
+     * document, because a percentage radius grows with the page: on a long case
+     * the glow climbed nearly three hundred pixels up and the bottom of the case
+     * panel sat inside it. A fixed band stays behind the footer where it belongs,
+     * however long the page runs.
+     */
+    radial-gradient(80% 11rem at 50% calc(100% + 2.5rem), rgba(55, 183, 156, 0.07), transparent 65%),
     var(--ink);
   color: var(--bone);
   font-family: var(--font-inter), system-ui, sans-serif;
