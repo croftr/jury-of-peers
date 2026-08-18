@@ -1,5 +1,6 @@
 "use client";
 
+import { caseMode } from "./types";
 import type { CaseFile } from "./types";
 
 /**
@@ -64,6 +65,9 @@ export function peekRetrial(): Retrial | null {
         title: typeof file.title === "string" ? file.title : "",
         evidence: file.evidence,
         options: [String(file.options[0]), String(file.options[1])],
+        // A retrial is the same question put again, so it is heard under the
+        // same charge — a decision reheard as a trial is a different matter.
+        mode: caseMode(file.mode),
       },
     };
   } catch {

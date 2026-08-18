@@ -4,6 +4,13 @@ Twelve jurors read a case, deliberate independently, and return their findings �
 send them back out, hear each other and are asked again. Works for criminal matters, civil
 disputes, or settling a debate — any question with two sides.
 
+A case can also be filed as a **decision** rather than a trial. A trial is decided on the
+record and nothing else; a decision treats the file as a brief and asks the jury to weigh it
+against what they already know — which is what a question like *which of these two cars
+should I buy* actually needs. Jurors are then required to say which of their points came
+from the brief and which from their own knowledge, and to flag what they are unsure of
+rather than inventing a figure that sounds right.
+
 Each juror is a **different model from a different lab**, reached through OpenRouter — so the
 jury's disagreement is real, not one model arguing with itself.
 

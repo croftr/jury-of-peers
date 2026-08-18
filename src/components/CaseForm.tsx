@@ -3,35 +3,66 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Gavel from "./Gavel";
 import { MAX_EVIDENCE_BYTES, cannotRead, estimateCost, estimateTokens } from "@/lib/estimate";
-import type { CaseFile, Juror } from "@/lib/types";
+import { caseMode } from "@/lib/types";
+import type { CaseFile, CaseMode, Juror } from "@/lib/types";
 
 /** What the extractor on /api/extract knows how to read. */
 const ACCEPT = ".txt,.text,.md,.markdown,.csv,.tsv,.json,.log,.rtf,.pdf,.docx,text/plain";
 
-const PRESETS: { key: string; label: string; blurb: string; options: [string, string] }[] = [
+/**
+ * The four shapes a case can take.
+ *
+ * `blurb` is what the card says about itself; `note` is the operative rule the
+ * jury will actually be charged with, shown once the shape is chosen. Kept to
+ * one sentence apiece — they share a fixed slot, and the slot is only as tall
+ * as the longest of them.
+ */
+const PRESETS: {
+  key: string;
+  label: string;
+  blurb: string;
+  note: string;
+  options: [string, string];
+  mode: CaseMode;
+}[] = [
   {
     key: "criminal",
     label: "Criminal trial",
     blurb: "A charge to be proved, or not.",
+    note: "Tried on the file alone. What is not in evidence is not proved, and the jury is asked to say so.",
     options: ["Guilty", "Not guilty"],
+    mode: "trial",
   },
   {
     key: "civil",
     label: "Civil dispute",
     blurb: "Two parties, one wrong to apportion.",
+    note: "Tried on the file alone. No charge to prove — the jury decides which side the record favours.",
     options: ["For the claimant", "For the respondent"],
+    mode: "trial",
   },
   {
     key: "debate",
     label: "Debate",
     blurb: "A motion, argued both ways.",
+    note: "Tried on the file alone. The motion is argued rather than proved: the better-made case wins.",
     options: ["Proposition", "Opposition"],
+    mode: "trial",
+  },
+  {
+    key: "decision",
+    label: "Decision",
+    blurb: "A choice to be made, weighed against what the jury knows.",
+    note: "Not tried on the file alone. The jury also weighs what it already knows, and says which is which.",
+    options: ["Option A", "Option B"],
+    mode: "decision",
   },
 ];
 
 const SAMPLE: CaseFile = {
   title: "The Matter of the Harbourside Warehouse Fire",
   options: ["Guilty", "Not guilty"],
+  mode: "trial",
   evidence: `CHARGE: Arson of a commercial premises, 14 March, 02:40.
 
 EVIDENCE FOR THE PROSECUTION
@@ -47,29 +78,75 @@ EVIDENCE FOR THE DEFENCE
 8. No forensic trace of the defendant was recovered from the point of entry, and the padlock shows tool marks inconsistent with the defendant's toolkit.`,
 };
 
+/**
+ * A worked decision, to show what a brief is meant to look like.
+ *
+ * Deliberately not a case file: it states requirements and constraints rather
+ * than evidence, and it leaves out everything the jury can be expected to know
+ * already — running costs, reliability, what these hold their value at. Filling
+ * those in is the jury's job under this charge, and a sample that pre-empted
+ * them would teach the wrong shape.
+ */
+const SAMPLE_DECISION: CaseFile = {
+  title: "The Matter of the Second Car",
+  options: ["The estate", "The hatchback"],
+  mode: "decision",
+  evidence: `THE CHOICE
+A: a five-year-old mid-size diesel estate, 68,000 miles, full service history, £11,500.
+B: a two-year-old petrol hatchback, 19,000 miles, one owner, manufacturer warranty to next spring, £13,200.
+
+WHAT IT IS FOR
+- Second car in the household. School run and a supermarket trip most days.
+- One long motorway drive a month, roughly 200 miles each way.
+- Two children, one still in a car seat, and a large dog that travels in the boot.
+
+CONSTRAINTS
+- £13,500 is the ceiling, and it has to include the first year of insurance.
+- Parking is on-street in a terraced row, so anything over about 4.6m is a nuisance.
+- I keep cars a long time. The last one I ran for nine years.
+
+WHAT I AM UNSURE ABOUT
+- Whether the diesel's mileage is a problem at that age, given how it will be driven.
+- Whether the warranty on B is worth the £1,700 difference.`,
+};
+
 /** 0 is the closed folder; 1–3 are the questions the clerk asks in order. */
 type Step = 0 | 1 | 2 | 3;
 
-const STEPS: { n: 1 | 2 | 3; label: string; question: string; hint: string }[] = [
-  {
-    n: 1,
-    label: "Name",
-    question: "What is this case called?",
-    hint: "A line the jury will see at the top of the file.",
-  },
-  {
-    n: 2,
-    label: "Type",
-    question: "What are they deciding between?",
-    hint: "Pick the shape of the case, then reword the two findings if you like.",
-  },
-  {
-    n: 3,
-    label: "Evidence",
-    question: "What should the jury read?",
-    hint: "Statements, timelines, both sides — they know only what you give them.",
-  },
-];
+/**
+ * What the clerk asks, and how it is worded.
+ *
+ * A trial and a decision ask for materially different things at step three — a
+ * record of what happened against a statement of what you want — so the wording
+ * follows the charge rather than trying to cover both and describing neither.
+ */
+function stepsFor(mode: CaseMode): { n: 1 | 2 | 3; label: string; question: string; hint: string }[] {
+  const decision = mode === "decision";
+  return [
+    {
+      n: 1,
+      label: "Name",
+      question: "What is this case called?",
+      hint: "A line the jury will see at the top of the file.",
+    },
+    {
+      n: 2,
+      label: "Type",
+      question: "What are they deciding between?",
+      hint: decision
+        ? "Pick the shape of the case, then name the two things you are choosing between."
+        : "Pick the shape of the case, then reword the two findings if you like.",
+    },
+    {
+      n: 3,
+      label: decision ? "Brief" : "Evidence",
+      question: decision ? "What should the jury know?" : "What should the jury read?",
+      hint: decision
+        ? "What you are choosing between, what you need from it, and what would rule an option out."
+        : "Statements, timelines, both sides — they know only what you give them.",
+    },
+  ];
+}
 
 export default function CaseForm({
   caseFile,
@@ -99,7 +176,17 @@ export default function CaseForm({
   retrial?: boolean;
 }) {
   const [step, setStep] = useState<Step>(startAt);
-  const [preset, setPreset] = useState("criminal");
+  // A case can arrive already written — a retrial, or a sample — so the shape it
+  // arrived in is the one shown as chosen. Options first, since they identify a
+  // preset exactly; failing that the charge, which at least narrows it.
+  const [preset, setPreset] = useState(
+    () =>
+      PRESETS.find(
+        (p) => p.options[0] === caseFile.options[0] && p.options[1] === caseFile.options[1],
+      )?.key ??
+      PRESETS.find((p) => p.mode === caseMode(caseFile.mode))?.key ??
+      "criminal",
+  );
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -114,6 +201,13 @@ export default function CaseForm({
     if (step === 1) titleRef.current?.focus();
     if (step === 3) evidenceRef.current?.focus();
   }, [step]);
+
+  const mode = caseMode(caseFile.mode);
+  const decision = mode === "decision";
+  const steps = stepsFor(mode);
+  // Reworded findings drop the preset to "custom", which still has a shape and
+  // still has a charge — fall back to the mode's own so the note never blanks.
+  const chosen = PRESETS.find((p) => p.key === preset) ?? PRESETS.find((p) => p.mode === mode)!;
 
   const titled = caseFile.title.trim().length > 0;
   const words = caseFile.evidence.trim() ? caseFile.evidence.trim().split(/\s+/).length : 0;
@@ -143,13 +237,16 @@ export default function CaseForm({
   const back = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
   const next = () => setStep((s) => (s < 3 ? ((s + 1) as Step) : s));
 
-  const sample = () => {
-    setPreset("criminal");
-    onChange(SAMPLE);
+  /** Fill the folder with a worked example of one shape or the other. */
+  const fill = (example: CaseFile, key: string) => {
+    setPreset(key);
+    onChange(example);
     setAttached([]);
     setUploadError(null);
     setStep(3);
   };
+
+  const sample = () => fill(SAMPLE, "criminal");
 
   /**
    * Read dropped or chosen documents into the evidence.
@@ -262,9 +359,15 @@ export default function CaseForm({
               </p>
             )}
 
+            {decision && (
+              <p className="mt-3 mono text-[10px] tracking-[0.2em] uppercase text-brass/80">
+                Decision · the jury may draw on what they know, not only on what you write here
+              </p>
+            )}
+
             {/* Where the clerk is up to. Answered steps are clickable. */}
             <ol className="mt-4 flex items-center gap-2 sm:gap-3">
-              {STEPS.map((s) => {
+              {steps.map((s) => {
                 const state = s.n === step ? "here" : s.n < step ? "done" : "ahead";
                 return (
                   <li key={s.n} className="flex-1">
@@ -298,9 +401,9 @@ export default function CaseForm({
 
           <div key={step} className="a-rise min-h-[19rem] sm:min-h-[21rem] flex flex-col">
             <h3 className="display text-2xl sm:text-[1.75rem] leading-snug">
-              {STEPS[step - 1].question}
+              {steps[step - 1].question}
             </h3>
-            <p className="mt-1.5 text-[14px] text-muted leading-relaxed">{STEPS[step - 1].hint}</p>
+            <p className="mt-1.5 text-[14px] text-muted leading-relaxed">{steps[step - 1].hint}</p>
 
             {/* 1 — the name of the matter */}
             {step === 1 && (
@@ -330,14 +433,18 @@ export default function CaseForm({
             {/* 2 — what they are choosing between */}
             {step === 2 && (
               <div className="mt-6">
-                <div className="grid sm:grid-cols-3 gap-2.5">
+                <div className="grid sm:grid-cols-2 gap-2.5">
                   {PRESETS.map((p) => (
                     <button
                       key={p.key}
                       type="button"
                       onClick={() => {
                         setPreset(p.key);
-                        onChange({ ...caseFile, options: [...p.options] as [string, string] });
+                        onChange({
+                          ...caseFile,
+                          options: [...p.options] as [string, string],
+                          mode: p.mode,
+                        });
                       }}
                       className={`text-left px-4 py-3 rounded-lg border transition-colors ${preset === p.key
                         ? "border-brass/60 bg-brass/10"
@@ -355,8 +462,27 @@ export default function CaseForm({
                   ))}
                 </div>
 
+                {/* What the chosen shape actually changes. Every preset carries one,
+                    in a slot sized to the longest of them, so moving between the four
+                    does not shunt the rest of the folder up and down the page. The
+                    decision charge is said again in the header, because step three is
+                    where this stops being visible. */}
+                <div className="mt-4 border-l-2 border-brass/40 pl-3.5 min-h-[3.75rem] sm:min-h-[2.5rem]">
+                  <p className="text-[13px] text-bone/70 leading-relaxed">{chosen.note}</p>
+                  {decision && (
+                    <button
+                      type="button"
+                      onClick={() => fill(SAMPLE_DECISION, "decision")}
+                      className="mt-2 mono text-[11px] tracking-[0.18em] uppercase text-muted hover:text-brass-lit
+                                 transition-colors underline underline-offset-4 decoration-dotted"
+                    >
+                      Fill it with a sample decision
+                    </button>
+                  )}
+                </div>
+
                 <p className="mt-6 mono text-[11px] tracking-[0.2em] uppercase text-muted/70">
-                  The two findings
+                  {decision ? "The two options" : "The two findings"}
                 </p>
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[0, 1].map((i) => (
@@ -462,7 +588,11 @@ export default function CaseForm({
                   value={caseFile.evidence}
                   onChange={(e) => onChange({ ...caseFile, evidence: e.target.value })}
                   rows={9}
-                  placeholder="Type or paste the evidence here — statements, timelines, both sides of the argument. Or drop a PDF, Word file, or text file anywhere in this box."
+                  placeholder={
+                    decision
+                      ? "Set out what you are choosing between, what you need from it, and anything that would rule an option out — budget, must-haves, deal-breakers. Say what you are unsure about too. Or drop a PDF, Word file, or text file anywhere in this box."
+                      : "Type or paste the evidence here — statements, timelines, both sides of the argument. Or drop a PDF, Word file, or text file anywhere in this box."
+                  }
                   className="w-full bg-black/30 border border-white/8 rounded-lg px-4 py-3 text-[15px] leading-relaxed
                              outline-none focus:border-brass/50 focus:bg-black/45 transition-colors resize-y
                              placeholder:text-white/20"

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { archiveEnabled, deleteCases, isValidId, listCases, saveCase } from "@/lib/archive";
 import { MAX_EVIDENCE_BYTES } from "@/lib/estimate";
 import { getJuror } from "@/lib/jurors";
+import { caseMode } from "@/lib/types";
 import type { CaseFile, Juror, JurorFailure, JurorVerdict, VerdictChoice } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -232,6 +233,9 @@ export async function POST(req: Request) {
           title: text(raw.title, MAX_TITLE).trim(),
           evidence: raw.evidence,
           options: [text(raw.options[0], 80), text(raw.options[1], 80)],
+          // Written even when it is the default, so a record says plainly what
+          // the jury was allowed to bring rather than leaving it to be inferred.
+          mode: caseMode(raw.mode),
         },
         jurors,
         instructions,

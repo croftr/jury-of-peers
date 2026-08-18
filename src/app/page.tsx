@@ -27,6 +27,7 @@ const EMPTY: CaseFile = {
   title: "",
   evidence: "",
   options: ["Guilty", "Not guilty"],
+  mode: "trial",
 };
 
 const WORDS = ["no", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];

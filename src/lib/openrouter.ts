@@ -1,5 +1,6 @@
 import { estimateTokens, readabilityError, roomTokens } from "./estimate";
 import { costOf, modelFor, type JurorModel } from "./models";
+import { caseMode } from "./types";
 import type { CaseFile, Juror, JurorVerdict, RoomPosition, VerdictChoice } from "./types";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -78,17 +79,56 @@ function assertReadable(
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 const spell = (n: number) => WORDS[n] ?? String(n);
 
+/**
+ * How the jury is charged, by mode.
+ *
+ * The trial rules are the strict ones: the record is the whole world, and a gap
+ * in it is a finding about the record rather than an invitation to fill it.
+ *
+ * The decision rules deliberately invert that — a brief asking which car to buy
+ * cannot contain what the jury needs to know about cars — and then spend most of
+ * their length on the failure mode that opens up the moment they do. A model
+ * told to use what it knows will produce a service interval, a resale figure or
+ * a recall notice that reads exactly like the real thing, so the rules ask for
+ * the provenance of every point and for uncertainty to be worn openly rather
+ * than rounded off into confidence.
+ */
+function charge(caseFile: CaseFile, archetype: string): string {
+  if (caseMode(caseFile.mode) === "decision") {
+    return `Rules of deliberation:
+- The brief is where you start, not where you stop. Bring what you know about this kind of choice — how these things usually work out, what the common regrets are, what turns out to matter more in practice than it does on paper.
+- Keep the two apart. Where a point comes from the brief, say so; where it comes from your own knowledge, say that instead. Never dress the second up as the first.
+- Do not manufacture precision. If you are unsure of a figure, a date, or a specific claim, say you are unsure rather than inventing one that sounds authoritative. An approximate claim, honestly flagged, is worth more than a confident invention.
+- Requirements, constraints and budgets stated in the brief are binding. What you know can tell you how well an option meets them; it cannot excuse an option from having to.
+- Your disposition is how you weigh a choice, not an answer you owe. A ${archetype} reading of a close call and of a lopsided one should not land in the same place.
+- Name the single consideration that actually decided it for you. Not the most persuasive-sounding one — the load-bearing one.`;
+  }
+
+  return `Rules of deliberation:
+- Decide only on the evidence supplied. Do not invent facts, witnesses, documents, or law that the case file does not contain.
+- If the evidence is thin, that is itself a finding about the evidence — say so and let it move you, rather than filling the gap with assumption.
+- Your disposition is how you read evidence, not a verdict you owe. A ${archetype} reading of a weak case and a strong one should not land in the same place.
+- Name the single fact, gap, or contradiction that actually decided it for you. Not the most dramatic one — the load-bearing one.`;
+}
+
 function systemPrompt(
   juror: Juror,
   caseFile: CaseFile,
   bench: number,
   instruction?: string,
 ): string {
+  const decision = caseMode(caseFile.mode) === "decision";
+  const archetype = juror.archetype.toLowerCase();
+
   const standing = instruction?.trim()
     ? `
 
 STANDING INSTRUCTION
-The court has given you this instruction for this trial. It shapes how you weigh the evidence and what you treat as important. It does not let you abandon the two findings, invent facts, or ignore the record:
+The court has given you this instruction for this matter. It shapes how you weigh ${
+        decision ? "the options" : "the evidence"
+      } and what you treat as important. It does not let you abandon the two findings, invent facts, or ${
+        decision ? "set aside what the brief requires" : "ignore the record"
+      }:
 """
 ${instruction.trim()}
 """`
@@ -101,32 +141,34 @@ ${instruction.trim()}
 
   return `You are Juror ${juror.seat} of ${spell(bench)} on a jury. You are known as "${juror.alias}".
 
-Your disposition as a ${juror.archetype.toLowerCase()} reader of a case: ${juror.disposition}
+Your disposition as a ${archetype} reader of a case: ${juror.disposition}
 
 You are deliberating alone. ${others} — so do not hedge toward an imagined consensus, and do not soften a finding to seem balanced. Reason from the material in front of you and commit.
 
 The question before you admits exactly two findings: "${caseFile.options[0]}" or "${caseFile.options[1]}". You must return one of them.
 
-Rules of deliberation:
-- Decide only on the evidence supplied. Do not invent facts, witnesses, documents, or law that the case file does not contain.
-- If the evidence is thin, that is itself a finding about the evidence — say so and let it move you, rather than filling the gap with assumption.
-- Your disposition is how you read evidence, not a verdict you owe. A ${juror.archetype.toLowerCase()} reading of a weak case and a strong one should not land in the same place.
-- Name the single fact, gap, or contradiction that actually decided it for you. Not the most dramatic one — the load-bearing one.${standing}
+${charge(caseFile, archetype)}${standing}
 
 Return your finding as JSON and nothing else.`;
 }
 
 function userPrompt(caseFile: CaseFile): string {
+  const decision = caseMode(caseFile.mode) === "decision";
+
   return `MATTER: ${caseFile.title || "Untitled matter"}
 
-THE EVIDENCE AND ARGUMENT BEFORE THE JURY
+${decision ? "THE BRIEF BEFORE THE JURY" : "THE EVIDENCE AND ARGUMENT BEFORE THE JURY"}
 ${caseFile.evidence}
 
 Return JSON with:
   finding         — exactly "${caseFile.options[0]}" or "${caseFile.options[1]}"
   confidence      — a number from 0.5 to 1 for how sure you are of that finding
-  rationale       — 2 to 4 sentences in your own voice as this juror, explaining what decided it
-  sticking_point  — the single fact, gap, or contradiction that carried the most weight, as a short phrase`;
+  rationale       — 2 to 4 sentences in your own voice as this juror, explaining what decided it${
+    decision ? ", making clear as you go which points come from the brief and which from what you know" : ""
+  }
+  sticking_point  — the single ${
+    decision ? "consideration" : "fact, gap, or contradiction"
+  } that carried the most weight, as a short phrase`;
 }
 
 function schema(caseFile: CaseFile) {
@@ -325,16 +367,47 @@ This is what each of them found, and the argument each of them gave.
 ${voices}`;
 }
 
-const RECONSIDER_CHARGE = `You have now heard the room. You are asked once more for your finding.
+/**
+ * The charge that goes with the polled room.
+ *
+ * The wording works hard against mere conformity, because the naive version of
+ * this reliably produces it: told only that eleven jurors disagree, models fold.
+ * What is worth measuring is whether an *argument* moves them, so the count is
+ * named as explicitly not being a reason.
+ *
+ * A decision carries one extra warning. Jurors drawing on their own knowledge
+ * produce confident specifics, and round two is where one juror's invented
+ * figure would otherwise spread through the whole room unchallenged.
+ */
+function reconsiderCharge(caseFile: CaseFile): string {
+  const decision = caseMode(caseFile.mode) === "decision";
+
+  return `You have now heard the room. You are asked once more for your finding.
 
 How to weigh what you have just read:
-- A count is not evidence. That the others landed elsewhere is not, by itself, a reason to move. An argument that shows you misread the record is.
-- Change your finding only if a juror has named a fact you overlooked, a reading of the evidence you had not considered, or an error in your own reasoning. If that has happened, say so plainly and say who.
-- Otherwise hold, and name the thing you are holding against — the point that was put to you and did not survive contact with the file.
+- A count is not ${decision ? "an argument" : "evidence"}. That the others landed elsewhere is not, by itself, a reason to move. ${
+    decision
+      ? "A juror who names something you had not weighed is."
+      : "An argument that shows you misread the record is."
+  }
+- Change your finding only if a juror has named ${
+    decision
+      ? "a consideration you had not weighed, something about these options you did not know"
+      : "a fact you overlooked, a reading of the evidence you had not considered"
+  }, or an error in your own reasoning. If that has happened, say so plainly and say who.
+- Otherwise hold, and name the thing you are holding against — the point that was put to you and did not survive ${
+    decision ? "a second look" : "contact with the file"
+  }.
 - You may keep your finding and move your confidence, up or down. Hearing a good argument you can answer is a reason to be more sure, not less.
-- Do not split the difference, do not soften your rationale to be agreeable, and do not move to make the room tidy. A jury that converges because it wants to agree has decided nothing.
+- Do not split the difference, do not soften your rationale to be agreeable, and do not move to make the room tidy. A jury that converges because it wants to agree has decided nothing.${
+    decision
+      ? `
+- Treat another juror's confident specific with the same care you would want applied to your own. If someone has asserted a figure or a fact you have reason to doubt, say so rather than quietly adopting it.`
+      : ""
+  }
 
 Return the same JSON as before — finding, confidence, rationale, sticking_point — with the rationale now saying, in your own voice, whether anything moved you and what it was, or that nothing did.`;
+}
 
 /**
  * Ask one juror to reconsider, having heard everyone else.
@@ -343,11 +416,6 @@ Return the same JSON as before — finding, confidence, rationale, sticking_poin
  * as their own previous turn, then the polled room is put to them — so a model
  * that changes its mind is genuinely revising a position it held, not scoring a
  * fresh case that happens to come with opinions attached.
- *
- * The prompt works hard against mere conformity, because the naive version of
- * this reliably produces it: told only that eleven jurors disagree, models fold.
- * What is worth measuring is whether an *argument* moves them, so the count is
- * named as explicitly not being a reason.
  */
 export async function requestReconsideration(
   juror: Juror,
@@ -410,7 +478,7 @@ async function attemptReconsideration(
           { role: "system", content: systemPrompt(juror, caseFile, bench, instruction) },
           { role: "user", content: userPrompt(caseFile) },
           ownTurn(caseFile, own),
-          { role: "user", content: `${roomReport(caseFile, room)}\n\n${RECONSIDER_CHARGE}` },
+          { role: "user", content: `${roomReport(caseFile, room)}\n\n${reconsiderCharge(caseFile)}` },
         ],
         response_format: { type: "json_schema", json_schema: schema(caseFile) },
         provider: { require_parameters: true },
@@ -534,7 +602,11 @@ export async function requestExplanation(
             role: "user",
             content: `${asked}
 
-Answer as this juror, in plain prose — no JSON, no headings, no bullet points. Two to four short paragraphs. Stay with the finding you gave and the evidence in the case file; if the honest answer is that something is genuinely uncertain, say so.`,
+Answer as this juror, in plain prose — no JSON, no headings, no bullet points. Two to four short paragraphs. Stay with the finding you gave${
+              caseMode(caseFile.mode) === "decision"
+                ? ". You may draw on what you know as well as the brief, but keep saying which is which, and do not invent a specific to make a point land"
+                : " and the evidence in the case file"
+            }; if the honest answer is that something is genuinely uncertain, say so.`,
           },
         ],
         ...(model.reasoning === "off"

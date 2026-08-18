@@ -1,5 +1,20 @@
 export type VerdictChoice = 0 | 1;
 
+/**
+ * What the jury is allowed to bring to the matter.
+ *
+ * A `trial` is decided on the record and nothing else — the jury knows only
+ * what the file contains, which is the right rule when the question is what
+ * was proved. A `decision` is the opposite: the file is a brief rather than a
+ * record, and jurors are asked to weigh it against what they already know
+ * about the world, because "which of these should I buy" is unanswerable from
+ * the brief alone.
+ *
+ * Optional, and absent means `trial` — every case filed before decisions
+ * existed was one, and so is every case that does not say otherwise.
+ */
+export type CaseMode = "trial" | "decision";
+
 /** A case can be a criminal trial, a civil dispute, a debate — anything with two sides. */
 export interface CaseFile {
   title: string;
@@ -7,6 +22,13 @@ export interface CaseFile {
   evidence: string;
   /** The two possible findings, e.g. ["Guilty", "Not guilty"]. */
   options: [string, string];
+  /** How the jury is charged. Absent means `trial`. */
+  mode?: CaseMode;
+}
+
+/** Read an untrusted mode, defaulting anything unrecognised to the stricter charge. */
+export function caseMode(mode: unknown): CaseMode {
+  return mode === "decision" ? "decision" : "trial";
 }
 
 export interface AvatarSpec {

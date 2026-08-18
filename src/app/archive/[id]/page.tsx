@@ -7,6 +7,7 @@ import JuryBox from "@/components/JuryBox";
 import JurorDossier from "@/components/JurorDossier";
 import VerdictPanel from "@/components/VerdictPanel";
 import { proposeRetrial } from "@/lib/retrial";
+import { caseMode } from "@/lib/types";
 import type { ArchivedCase } from "@/lib/types";
 
 export default function ArchivedCasePage() {
@@ -139,7 +140,9 @@ export default function ArchivedCasePage() {
           <section className="panel rounded-2xl overflow-hidden mb-12 a-rise">
             <div className="px-6 sm:px-8 py-6">
               <p className="mono text-[10px] tracking-[0.24em] uppercase text-muted mb-3">
-                The evidence, as it was put
+                {caseMode(record.caseFile.mode) === "decision"
+                  ? "The brief, as it was put"
+                  : "The evidence, as it was put"}
               </p>
               <div className="text-sm leading-relaxed text-bone/85 whitespace-pre-wrap max-h-96 overflow-y-auto">
                 {record.caseFile.evidence}
@@ -150,6 +153,17 @@ export default function ArchivedCasePage() {
                 Findings open to the jury ·{" "}
                 <span className="text-for">{record.caseFile.options[0]}</span> or{" "}
                 <span className="text-against">{record.caseFile.options[1]}</span>
+              </span>
+              {/* What the jury was allowed to bring is part of the record: the same
+                  brief under the other charge is a different question, and a reader
+                  comparing two cases needs to know which one they are looking at. */}
+              <span className="mono text-[9px] tracking-[0.2em] uppercase text-muted">
+                Charge ·{" "}
+                <span className="text-brass/90">
+                  {caseMode(record.caseFile.mode) === "decision"
+                    ? "Decided on the brief and what the jury knew"
+                    : "Tried on the record alone"}
+                </span>
               </span>
             </div>
           </section>

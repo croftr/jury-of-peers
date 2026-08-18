@@ -43,9 +43,10 @@ export const MAX_EVIDENCE_BYTES = MAX_RECORD_BYTES - RECORD_OVERHEAD_BYTES;
 /**
  * The prompt scaffolding around the case: the juror's persona and charge, the
  * schema, the field descriptions. Measured from the assembled prompts and
- * rounded up.
+ * rounded up — from the decision charge, which is the longer of the two, so a
+ * trial is merely over-estimated rather than a decision under-estimated.
  */
-const PROMPT_OVERHEAD = 700;
+const PROMPT_OVERHEAD = 850;
 
 /**
  * The estimate is a guess, and guessing low is the expensive direction — it
